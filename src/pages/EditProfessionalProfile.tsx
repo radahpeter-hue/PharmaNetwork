@@ -12,33 +12,8 @@ import {
   IndividualProfile,
   PrimaryCadre
 } from '../types';
-import { EMPLOYMENT_TYPES, UGANDA_DISTRICTS } from '../constants';
+import { EMPLOYMENT_TYPES, PROFESSIONAL_CADRES, UGANDA_DISTRICTS } from '../constants';
 import { calculateProfessionalProfileCompleteness } from '../lib/profileCompleteness';
-
-const CADRE_OPTIONS: Array<{ id: PrimaryCadre; label: string }> = [
-  { id: 'pharmacist', label: 'Registered Pharmacist' },
-  { id: 'pharmacy_technician', label: 'Pharmacy Technician' },
-  { id: 'pharmacy_assistant', label: 'Pharmacy Assistant' },
-  { id: 'dispenser', label: 'Dispenser' },
-  { id: 'drug_shop_auxiliary', label: 'Drug Shop Auxiliary Staff' },
-  { id: 'qa_qc_officer', label: 'QA/QC Officer' },
-  { id: 'procurement_officer', label: 'Procurement Officer' },
-  { id: 'medical_sales_rep', label: 'Medical Sales Representative' },
-  { id: 'pharmacovigilance_officer', label: 'Pharmacovigilance Officer' },
-  { id: 'regulatory_affairs', label: 'Regulatory Affairs' },
-  { id: 'production_personnel', label: 'Production Personnel' },
-  { id: 'stores_officer', label: 'Stores Officer' },
-  { id: 'stores_manager', label: 'Stores Manager' },
-  { id: 'other', label: 'Other' }
-];
-
-const QUALIFICATIONS = [
-  'Bachelor of Pharmacy BPharm',
-  'Diploma in Pharmacy',
-  'Certificate in Pharmacy',
-  'Enrolled Nurse / Midwife with dispensing training',
-  'Other'
-];
 
 const YEARS_OPTIONS = [
   { id: 'less_than_1', label: 'Less than 1 year' },
@@ -312,7 +287,7 @@ const EditProfessionalProfile: React.FC = () => {
                 disabled={verifiedIdentityLocked}
                 onChange={e => setForm({ ...form, primaryCadre: e.target.value as PrimaryCadre })}
               >
-                {CADRE_OPTIONS.map(option => <option key={option.id} value={option.id}>{option.label}</option>)}
+                {PROFESSIONAL_CADRES.map(option => <option key={option.id} value={option.id}>{option.label}</option>)}
               </select>
             </Field>
             <Field label="Professional registration number">
@@ -325,9 +300,12 @@ const EditProfessionalProfile: React.FC = () => {
               <p className="text-[11px] text-zinc-400 mt-1">Submitted registration details remain subject to professional-authority verification.</p>
             </Field>
             <Field label="Highest qualification">
-              <select className="form-input" value={form.qualification} onChange={e => setForm({ ...form, qualification: e.target.value })}>
-                {QUALIFICATIONS.map(item => <option key={item} value={item}>{item}</option>)}
-              </select>
+              <input
+                className="form-input"
+                value={form.qualification}
+                placeholder="Enter your highest relevant qualification"
+                onChange={e => setForm({ ...form, qualification: e.target.value })}
+              />
             </Field>
             <Field label="Year of qualification">
               <input type="number" className="form-input" min={1950} max={new Date().getFullYear()} value={form.qualificationYear} onChange={e => setForm({ ...form, qualificationYear: Number(e.target.value) })} />
