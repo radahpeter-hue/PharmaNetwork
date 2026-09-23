@@ -1,0 +1,26 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  
+  --color-primary: #1B5E20;
+  --color-primary-light: #2E7D32;
+  --color-accent: #F9A825;
+  --color-background: #F9FAFB;
+}
+
+@layer base {
+  body {
+    @apply font-sans bg-background text-zinc-900;
+  }
+}
+
+@keyframes pulse-gentle {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 0.8; }
+}
+
+.animate-pulse-gentle {
+  animation: pulse-gentle 4s ease-in-out infinite;
+}

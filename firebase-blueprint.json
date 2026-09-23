@@ -1,0 +1,284 @@
+{
+  "entities": {
+    "User": {
+      "title": "User Account",
+      "description": "Base account information for all users",
+      "type": "object",
+      "properties": {
+        "accountType": { "type": "string", "enum": ["individual", "organisation"] },
+        "isActive": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["accountType", "isActive", "createdAt"]
+    },
+    "IndividualProfile": {
+      "title": "Individual Professional Profile",
+      "description": "Public and private profile data for pharmacists and other professionals",
+      "type": "object",
+      "properties": {
+        "fullName": { "type": "string" },
+        "phone": { "type": "string" },
+        "district": { "type": "string" },
+        "primaryCadre": { "type": "string" },
+        "registrationNumber": { "type": "string" },
+        "qualification": { "type": "string" },
+        "qualificationYear": { "type": "number" },
+        "yearsExperience": { "type": "string" },
+        "availabilityStatus": { "type": "string" },
+        "preferredEmploymentTypes": { "type": "array", "items": { "type": "string" } },
+        "areasOfPractice": { "type": "array", "items": { "type": "string" } },
+        "roles": { "type": "array", "items": { "type": "string" } },
+        "bio": { "type": "string" },
+        "profilePhotoUrl": { "type": "string" },
+        "cvUrl": { "type": "string" },
+        "profileCompleteness": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" },
+        "credentialVerificationStatus": { "type": "string", "enum": ["unverified", "pending_review", "verified", "rejected"] },
+        "credentialVerifiedAt": { "type": ["string", "null"], "format": "date-time" },
+        "credentialVerifiedByBody": { "type": "string" },
+        "credentialVerifiedByUid": { "type": "string" },
+        "credentialRejectionReason": { "type": "string" },
+        "practisingLicenceStatus": { "type": "string", "enum": ["not_renewed", "renewed_current", "suspended", "lapsed"] },
+        "practisingLicenceYear": { "type": "number" },
+        "licenceRenewalDate": { "type": ["string", "null"], "format": "date-time" },
+        "licenceExpiryDate": { "type": ["string", "null"], "format": "date-time" },
+        "licenceSuspensionReason": { "type": "string" }
+      }
+    },
+    "OrganisationProfile": {
+      "title": "Organisation Network Profile",
+      "description": "Consolidated organisation data for an owner account",
+      "type": "object",
+      "properties": {
+        "organisations": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string" },
+              "organisationName": { "type": "string" },
+              "organisationTypes": { "type": "array", "items": { "type": "string" } },
+              "ndaLicenceNumber": { "type": "string" },
+              "district": { "type": "string" },
+              "contactPhone": { "type": "string" },
+              "about": { "type": "string" },
+              "branchCount": { "type": "string" },
+              "isHiring": { "type": "boolean" }
+            }
+          }
+        },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      }
+    },
+    "JobPosting": {
+      "title": "Job Posting",
+      "description": "A job opportunity posted by an organisation",
+      "type": "object",
+      "properties": {
+        "organisationUserId": { "type": "string" },
+        "organisationName": { "type": "string" },
+        "organisationTypes": { "type": "array", "items": { "type": "string" } },
+        "organisationDistrict": { "type": "string" },
+        "organisationLogoUrl": { "type": "string" },
+        "title": { "type": "string" },
+        "cadreRequired": { "type": "string" },
+        "district": { "type": "string" },
+        "employmentType": { "type": "string" },
+        "description": { "type": "string" },
+        "requirements": { "type": "string" },
+        "contactMethod": { "type": "string" },
+        "contactDetail": { "type": "string" },
+        "status": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "expiresAt": { "type": "string", "format": "date-time" },
+        "interestCount": { "type": "number" }
+      }
+    },
+    "AvailabilityPost": {
+      "title": "Availability Post",
+      "description": "A professional available for work",
+      "type": "object",
+      "properties": {
+        "individualUserId": { "type": "string" },
+        "fullName": { "type": "string" },
+        "primaryCadre": { "type": "string" },
+        "district": { "type": "string" },
+        "profilePhotoUrl": { "type": "string" },
+        "registrationNumber": { "type": "string" },
+        "headline": { "type": "string" },
+        "preferredEmploymentTypes": { "type": "array", "items": { "type": "string" } },
+        "description": { "type": "string" },
+        "contactMethod": { "type": "string" },
+        "contactDetail": { "type": "string" },
+        "status": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "expiresAt": { "type": "string", "format": "date-time" },
+        "interestCount": { "type": "number" }
+      }
+    },
+    "InterestEvent": {
+      "title": "Interest Event",
+      "description": "Log of a professional expressing interest in a job or vice versa",
+      "type": "object",
+      "properties": {
+        "actorId": { "type": "string" },
+        "targetId": { "type": "string" },
+        "type": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      }
+    },
+    "BusinessListing": {
+      "title": "Business Listing",
+      "description": "Pharmacy or drug shop business for sale",
+      "type": "object",
+      "properties": {
+        "sellerUserId": { "type": "string" },
+        "isConfidential": { "type": "boolean" },
+        "listingTitle": { "type": "string" },
+        "businessType": { "type": "string" },
+        "district": { "type": "string" },
+        "locationDescription": { "type": "string" },
+        "yearsInOperation": { "type": "number" },
+        "ndaLicenceStatus": { "type": "string" },
+        "staffCount": { "type": "number" },
+        "businessDescription": { "type": "string" },
+        "askingPriceUGX": { "type": ["number", "null"] },
+        "priceNegotiable": { "type": "boolean" },
+        "monthlySalesRange": { "type": "string" },
+        "reasonForSale": { "type": "string" },
+        "whatsIncluded": { "type": "array", "items": { "type": "string" } },
+        "contactMethod": { "type": "string" },
+        "contactDetail": { "type": "string" },
+        "contactName": { "type": "string" },
+        "photoUrls": { "type": "array", "items": { "type": "string" } },
+        "status": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "expiresAt": { "type": "string", "format": "date-time" },
+        "viewCount": { "type": "number" }
+      }
+    },
+    "Conversation": {
+      "title": "Messaging Conversation",
+      "description": "A conversation between two users",
+      "type": "object",
+      "properties": {
+        "participants": { "type": "array", "items": { "type": "string" } },
+        "participantNames": { "type": "object" },
+        "participantPhotos": { "type": "object" },
+        "lastMessage": { "type": "string" },
+        "lastMessageAt": { "type": "string", "format": "date-time" },
+        "lastMessageSenderId": { "type": "string" },
+        "unreadCount": { "type": "object" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "relatedPostingId": { "type": "string" },
+        "relatedPostingTitle": { "type": "string" }
+      }
+    },
+    "ContentFlag": {
+      "title": "Content Flag",
+      "description": "User feedback report on platform content",
+      "type": "object",
+      "properties": {
+        "reporterUserId": { "type": "string" },
+        "contentType": { "type": "string" },
+        "contentId": { "type": "string" },
+        "contentOwnerId": { "type": "string" },
+        "reason": { "type": "string" },
+        "details": { "type": "string" },
+        "status": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "reviewedAt": { "type": ["string", "null"], "format": "date-time" },
+        "reviewedBy": { "type": ["string", "null"] }
+      }
+    },
+    "RegulatoryBodyAdmin": {
+      "title": "Regulatory Body Admin",
+      "description": "Information about regulatory body staff members who act as admins",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "fullName": { "type": "string" },
+        "email": { "type": "string" },
+        "body": { "type": "string", "enum": ["PSU", "AHPC", "UNMC"] },
+        "bodyFullName": { "type": "string" },
+        "scopedCadres": { "type": "array", "items": { "type": "string" } },
+        "role": { "type": "string" },
+        "isActive": { "type": "boolean" },
+        "addedBy": { "type": "string" },
+        "addedAt": { "type": "string", "format": "date-time" },
+        "lastLoginAt": { "type": ["string", "null"], "format": "date-time" },
+        "notes": { "type": "string" }
+      },
+      "required": ["uid", "fullName", "email", "body", "scopedCadres", "role", "isActive"]
+    },
+    "VerificationDocument": {
+      "title": "Verification Document",
+      "description": "Verification files and documents uploaded by professionals",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "registrationCertificateUrl": { "type": "string" },
+        "practisingCertificateUrl": { "type": "string" },
+        "additionalDocumentUrls": { "type": "array", "items": { "type": "string" } },
+        "submittedAt": { "type": "string", "format": "date-time" },
+        "submittedForYear": { "type": "number" },
+        "reviewedAt": { "type": ["string", "null"], "format": "date-time" },
+        "reviewedByUid": { "type": ["string", "null"] },
+        "reviewedByBody": { "type": ["string", "null"] },
+        "reviewNotes": { "type": "string" }
+      }
+    }
+  },
+  "firestore": {
+    "/users/{uid}": {
+      "schema": "User",
+      "description": "Master user records keyed by Auth UID"
+    },
+    "/individualProfiles/{uid}": {
+      "schema": "IndividualProfile",
+      "description": "Individual professional profiles keyed by Auth UID"
+    },
+    "/organisationProfiles/{uid}": {
+      "schema": "OrganisationProfile",
+      "description": "Organisation profiles keyed by Auth UID"
+    },
+    "/jobPostings/{jobId}": {
+      "schema": "JobPosting",
+      "description": "Active and past job postings"
+    },
+    "/availabilityPosts/{postId}": {
+      "schema": "AvailabilityPost",
+      "description": "Professional availability posts"
+    },
+    "/interestEvents/{eventId}": {
+      "schema": "InterestEvent",
+      "description": "Tracking expressions of interest"
+    },
+    "/platformStats/counts": {
+      "schema": "object",
+      "description": "Aggregated platform statistics"
+    },
+    "/businessListings/{listingId}": {
+      "schema": "BusinessListing",
+      "description": "Pharmacy businesses listed for sale"
+    },
+    "/messages/{conversationId}": {
+      "schema": "Conversation",
+      "description": "Private direct message channels"
+    },
+    "/contentFlags/{flagId}": {
+      "schema": "ContentFlag",
+      "description": "Flagged and reported contents"
+    },
+    "/regulatoryBodyAdmins/{uid}": {
+      "schema": "RegulatoryBodyAdmin",
+      "description": "Regulatory body staff members with admin capabilities"
+    },
+    "/verificationDocuments/{userId}": {
+      "schema": "VerificationDocument",
+      "description": "Verification documents uploaded by individual professionals"
+    }
+  }
+}

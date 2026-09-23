@@ -1,0 +1,8 @@
+{
+  "name": "PharmaNetwork Uganda",
+  "description": "A professional network and opportunities platform for Uganda's pharmaceutical supply chain. Connecting pharmacy owners, pharmacists, and auxiliary professionals.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
