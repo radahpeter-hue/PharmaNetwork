@@ -55,7 +55,8 @@ const JobBoard: React.FC = () => {
       const now = Timestamp.now();
       const simplerQ = query(
         collection(db, 'jobPostings'),
-        where('status', '==', 'active')
+        where('status', '==', 'active'),
+        where('expiresAt', '>', now)
       );
       
       const snap = await getDocs(simplerQ);
@@ -77,7 +78,8 @@ const JobBoard: React.FC = () => {
       const now = Timestamp.now();
       const q = query(
         collection(db, 'availabilityPosts'),
-        where('status', '==', 'active')
+        where('status', '==', 'active'),
+        where('expiresAt', '>', now)
       );
       const snap = await getDocs(q);
       const data = snap.docs.map(doc => ({ ...doc.data(), id: doc.id } as AvailabilityPost))
@@ -97,7 +99,8 @@ const JobBoard: React.FC = () => {
       const now = Timestamp.now();
       const q = query(
         collection(db, 'businessListings'),
-        where('status', '==', 'active')
+        where('status', '==', 'active'),
+        where('expiresAt', '>', now)
       );
       const snap = await getDocs(q);
       const data = snap.docs.map(doc => ({ ...doc.data(), id: doc.id } as any))

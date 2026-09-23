@@ -186,7 +186,14 @@ export const BusinessListingDetail: React.FC = () => {
   }
 
   // If document does not exist, or status is sold or withdrawn (and viewer is not the seller)
-  const isNoLongerAvailable = !listing || ((listing.status === 'sold' || listing.status === 'withdrawn') && !isOwner);
+  const listingExpired = !!listing?.expiresAt
+    && (listing.expiresAt.toMillis ? listing.expiresAt.toMillis() : new Date(listing.expiresAt).getTime()) <= Date.now();
+  const isNoLongerAvailable = !listing
+    || (!isOwner && (
+      listing.status === 'sold'
+      || listing.status === 'withdrawn'
+      || listingExpired
+    ));
 
   if (isNoLongerAvailable) {
     return (

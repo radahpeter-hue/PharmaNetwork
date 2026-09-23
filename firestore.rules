@@ -482,7 +482,17 @@ service cloud.firestore {
     }
 
     match /jobPostings/{jobId} {
-      allow read: if isActiveMember() || isAdmin();
+      allow read: if isAdmin()
+        || (
+          isActiveMember()
+          && (
+            resource.data.organisationUserId == request.auth.uid
+            || (
+              resource.data.status == 'active'
+              && resource.data.expiresAt > request.time
+            )
+          )
+        );
       allow create: if isActiveMember()
         && request.resource.data.organisationUserId == request.auth.uid
         && currentAccountType() == 'organisation'
@@ -535,7 +545,17 @@ service cloud.firestore {
     }
 
     match /availabilityPosts/{postId} {
-      allow read: if isActiveMember() || isAdmin();
+      allow read: if isAdmin()
+        || (
+          isActiveMember()
+          && (
+            resource.data.individualUserId == request.auth.uid
+            || (
+              resource.data.status == 'active'
+              && resource.data.expiresAt > request.time
+            )
+          )
+        );
       allow create: if isActiveMember()
         && request.resource.data.individualUserId == request.auth.uid
         && currentAccountType() == 'individual'
@@ -629,7 +649,17 @@ service cloud.firestore {
     }
 
     match /businessListings/{listingId} {
-      allow read: if isActiveMember() || isAdmin();
+      allow read: if isAdmin()
+        || (
+          isActiveMember()
+          && (
+            resource.data.sellerUserId == request.auth.uid
+            || (
+              resource.data.status in ['active', 'under_offer']
+              && resource.data.expiresAt > request.time
+            )
+          )
+        );
       allow create: if isActiveMember()
         && request.resource.data.sellerUserId == request.auth.uid
         && request.resource.data.photoUrls is list
@@ -730,7 +760,8 @@ service cloud.firestore {
           isActiveMember()
           && exists(/databases/$(database)/documents/businessListings/$(listingId))
           && get(/databases/$(database)/documents/businessListings/$(listingId)).data.isConfidential == false
-          && get(/databases/$(database)/documents/businessListings/$(listingId)).data.status == 'active'
+          && get(/databases/$(database)/documents/businessListings/$(listingId)).data.status in ['active', 'under_offer']
+          && get(/databases/$(database)/documents/businessListings/$(listingId)).data.expiresAt > request.time
         );
 
       allow create: if isActiveMember()

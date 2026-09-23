@@ -135,8 +135,9 @@ const AvailabilityPostDetail: React.FC = () => {
 
   const postExpired = !!post?.expiresAt
     && (post.expiresAt.toMillis ? post.expiresAt.toMillis() : new Date(post.expiresAt).getTime()) <= Date.now();
+  const isOwner = !!post && user?.uid === post.individualUserId;
 
-  if (!post || post.status !== 'active' || postExpired) return (
+  if (!post || (!isOwner && (post.status !== 'active' || postExpired))) return (
     <div className="max-w-2xl mx-auto px-4 py-20 text-center">
       <div className="w-16 h-16 bg-zinc-50 rounded-2xl flex items-center justify-center text-zinc-300 mx-auto mb-6">
         <AlertCircle size={32} />
@@ -146,7 +147,6 @@ const AvailabilityPostDetail: React.FC = () => {
     </div>
   );
 
-  const isOwner = user?.uid === post.individualUserId;
   const formatDate = (ts: any) => ts?.toDate().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 
   return (
@@ -245,13 +245,26 @@ const AvailabilityPostDetail: React.FC = () => {
               ) : isOwner ? (
                 <div className="space-y-4">
                    <p className="text-xs font-bold text-zinc-400 uppercase tracking-widest text-center">Your Post</p>
-                   <Button variant="outline" fullWidth onClick={() => navigate(`/availability/${post.id}/edit`)}>Edit Post</Button>
-                   <button 
-                     onClick={handleClosePost}
-                     className="w-full py-3 rounded-xl border border-red-200 text-red-600 font-bold text-sm hover:bg-red-50 transition-colors"
-                   >
-                     Close Post
-                   </button>
+                   {post.status === 'active' && !postExpired ? (
+                     <>
+                       <Button variant="outline" fullWidth onClick={() => navigate(`/availability/${post.id}/edit`)}>Edit Post</Button>
+                       <button 
+                         onClick={handleClosePost}
+                         className="w-full py-3 rounded-xl border border-red-200 text-red-600 font-bold text-sm hover:bg-red-50 transition-colors"
+                       >
+                         Close Post
+                       </button>
+                     </>
+                   ) : (
+                     <div className="rounded-xl bg-zinc-50 border border-zinc-100 p-4 text-center">
+                       <p className="text-xs font-bold text-zinc-700">
+                         {post.status === 'closed' ? 'This availability post is closed.' : 'This availability post has expired.'}
+                       </p>
+                       <Link to="/my-postings" className="text-[10px] text-primary font-bold uppercase tracking-widest mt-2 inline-block">
+                         Manage My Postings
+                       </Link>
+                     </div>
+                   )}
                 </div>
               ) : userAccount?.accountType === 'individual' ? (
                 <div className="bg-zinc-50 p-6 rounded-2xl text-center border-t border-amber-200">

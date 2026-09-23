@@ -61,7 +61,8 @@ const JobPostingDetail: React.FC = () => {
         const q = query(
           collection(db, 'jobPostings'),
           where('cadreRequired', '==', cadre),
-          where('status', '==', 'active')
+          where('status', '==', 'active'),
+          where('expiresAt', '>', Timestamp.now())
         );
         const snap = await getDocs(q);
         const data = snap.docs
@@ -152,8 +153,9 @@ const JobPostingDetail: React.FC = () => {
 
   const jobExpired = !!job?.expiresAt
     && (job.expiresAt.toMillis ? job.expiresAt.toMillis() : new Date(job.expiresAt).getTime()) <= Date.now();
+  const isOwner = !!job && user?.uid === job.organisationUserId;
 
-  if (!job || job.status !== 'active' || jobExpired) return (
+  if (!job || (!isOwner && (job.status !== 'active' || jobExpired))) return (
     <div className="max-w-2xl mx-auto px-4 py-20 text-center">
       <div className="w-16 h-16 bg-zinc-50 rounded-2xl flex items-center justify-center text-zinc-300 mx-auto mb-6">
         <AlertCircle size={32} />
@@ -163,7 +165,6 @@ const JobPostingDetail: React.FC = () => {
     </div>
   );
 
-  const isOwner = user?.uid === job.organisationUserId;
   const formatDate = (ts: any) => ts?.toDate().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 
   return (
@@ -282,13 +283,26 @@ const JobPostingDetail: React.FC = () => {
               ) : isOwner ? (
                 <div className="space-y-4">
                    <p className="text-xs font-bold text-zinc-400 uppercase tracking-widest text-center">Your Posting</p>
-                   <Button variant="outline" fullWidth onClick={() => navigate(`/jobs/${job.id}/edit`)}>Edit Posting</Button>
-                   <button 
-                     onClick={handleClosePosting}
-                     className="w-full py-3 rounded-xl border border-red-200 text-red-600 font-bold text-sm hover:bg-red-50 transition-colors"
-                   >
-                     Close Posting
-                   </button>
+                   {job.status === 'active' && !jobExpired ? (
+                     <>
+                       <Button variant="outline" fullWidth onClick={() => navigate(`/jobs/${job.id}/edit`)}>Edit Posting</Button>
+                       <button 
+                         onClick={handleClosePosting}
+                         className="w-full py-3 rounded-xl border border-red-200 text-red-600 font-bold text-sm hover:bg-red-50 transition-colors"
+                       >
+                         Close Posting
+                       </button>
+                     </>
+                   ) : (
+                     <div className="rounded-xl bg-zinc-50 border border-zinc-100 p-4 text-center">
+                       <p className="text-xs font-bold text-zinc-700">
+                         {job.status === 'closed' ? 'This posting is closed.' : 'This posting has expired.'}
+                       </p>
+                       <Link to="/my-postings" className="text-[10px] text-primary font-bold uppercase tracking-widest mt-2 inline-block">
+                         Manage My Postings
+                       </Link>
+                     </div>
+                   )}
                 </div>
               ) : userAccount?.accountType === 'organisation' ? (
                 <div className="bg-zinc-50 p-6 rounded-2xl text-center">

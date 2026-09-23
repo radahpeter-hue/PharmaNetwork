@@ -869,3 +869,132 @@ test('expired quota slots can be atomically reused', async () => {
     });
   }));
 });
+
+
+test('non-owners can read only active unexpired opportunity and business documents', async () => {
+  const now = Date.now();
+  const future = Timestamp.fromMillis(now + 24 * 60 * 60 * 1000);
+  const past = Timestamp.fromMillis(now - 24 * 60 * 60 * 1000);
+
+  await seed(async db => {
+    for (const [uid, accountType, accountClass] of [
+      ['visibility-reader', 'individual', 'professional'],
+      ['visibility-org-owner', 'organisation', 'organisation'],
+      ['visibility-prof-owner', 'individual', 'professional'],
+      ['visibility-business-owner', 'individual', 'professional']
+    ]) {
+      await setDoc(doc(db, 'users', uid), {
+        id: uid,
+        accountType,
+        accountClass,
+        accountStatus: 'ACTIVE',
+        isActive: true,
+        isVerified: accountType === 'individual'
+      });
+    }
+
+    await setDoc(doc(db, 'jobPostings', 'job-visible'), {
+      organisationUserId: 'visibility-org-owner',
+      status: 'active',
+      expiresAt: future
+    });
+    await setDoc(doc(db, 'jobPostings', 'job-closed'), {
+      organisationUserId: 'visibility-org-owner',
+      status: 'closed',
+      expiresAt: future
+    });
+    await setDoc(doc(db, 'jobPostings', 'job-expired'), {
+      organisationUserId: 'visibility-org-owner',
+      status: 'active',
+      expiresAt: past
+    });
+
+    await setDoc(doc(db, 'availabilityPosts', 'availability-visible'), {
+      individualUserId: 'visibility-prof-owner',
+      status: 'active',
+      expiresAt: future
+    });
+    await setDoc(doc(db, 'availabilityPosts', 'availability-expired'), {
+      individualUserId: 'visibility-prof-owner',
+      status: 'active',
+      expiresAt: past
+    });
+
+    await setDoc(doc(db, 'businessListings', 'business-visible'), {
+      sellerUserId: 'visibility-business-owner',
+      isConfidential: false,
+      status: 'active',
+      expiresAt: future
+    });
+    await setDoc(doc(db, 'businessListings', 'business-sold'), {
+      sellerUserId: 'visibility-business-owner',
+      isConfidential: false,
+      status: 'sold',
+      expiresAt: future
+    });
+    await setDoc(doc(db, 'businessListings', 'business-expired'), {
+      sellerUserId: 'visibility-business-owner',
+      isConfidential: false,
+      status: 'active',
+      expiresAt: past
+    });
+  });
+
+  const readerDb = testEnv.authenticatedContext('visibility-reader').firestore();
+  const orgOwnerDb = testEnv.authenticatedContext('visibility-org-owner').firestore();
+  const profOwnerDb = testEnv.authenticatedContext('visibility-prof-owner').firestore();
+  const businessOwnerDb = testEnv.authenticatedContext('visibility-business-owner').firestore();
+
+  await assertSucceeds(getDoc(doc(readerDb, 'jobPostings', 'job-visible')));
+  await assertFails(getDoc(doc(readerDb, 'jobPostings', 'job-closed')));
+  await assertFails(getDoc(doc(readerDb, 'jobPostings', 'job-expired')));
+  await assertSucceeds(getDoc(doc(orgOwnerDb, 'jobPostings', 'job-closed')));
+
+  await assertSucceeds(getDoc(doc(readerDb, 'availabilityPosts', 'availability-visible')));
+  await assertFails(getDoc(doc(readerDb, 'availabilityPosts', 'availability-expired')));
+  await assertSucceeds(getDoc(doc(profOwnerDb, 'availabilityPosts', 'availability-expired')));
+
+  await assertSucceeds(getDoc(doc(readerDb, 'businessListings', 'business-visible')));
+  await assertFails(getDoc(doc(readerDb, 'businessListings', 'business-sold')));
+  await assertFails(getDoc(doc(readerDb, 'businessListings', 'business-expired')));
+  await assertSucceeds(getDoc(doc(businessOwnerDb, 'businessListings', 'business-sold')));
+});
+
+test('expired non-confidential business private details are hidden from other members', async () => {
+  const past = Timestamp.fromMillis(Date.now() - 60 * 1000);
+
+  await seed(async db => {
+    await setDoc(doc(db, 'users', 'private-expired-owner'), {
+      id: 'private-expired-owner',
+      accountType: 'individual',
+      accountClass: 'professional',
+      accountStatus: 'ACTIVE',
+      isActive: true,
+      isVerified: true
+    });
+    await setDoc(doc(db, 'users', 'private-expired-reader'), {
+      id: 'private-expired-reader',
+      accountType: 'individual',
+      accountClass: 'professional',
+      accountStatus: 'ACTIVE',
+      isActive: true,
+      isVerified: true
+    });
+    await setDoc(doc(db, 'businessListings', 'private-expired-listing'), {
+      sellerUserId: 'private-expired-owner',
+      isConfidential: false,
+      status: 'active',
+      expiresAt: past
+    });
+    await setDoc(doc(db, 'businessListingPrivate', 'private-expired-listing'), {
+      sellerUserId: 'private-expired-owner',
+      contactDetail: '+256700000000'
+    });
+  });
+
+  const readerDb = testEnv.authenticatedContext('private-expired-reader').firestore();
+  const ownerDb = testEnv.authenticatedContext('private-expired-owner').firestore();
+
+  await assertFails(getDoc(doc(readerDb, 'businessListingPrivate', 'private-expired-listing')));
+  await assertSucceeds(getDoc(doc(ownerDb, 'businessListingPrivate', 'private-expired-listing')));
+});
