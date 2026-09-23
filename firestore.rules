@@ -15,15 +15,15 @@ service cloud.firestore {
       return isSignedIn() && request.auth.token.admin == true;
     }
 
-    function isBodyAdmin() {
+    function isAuthorityAdmin() {
       return isSignedIn()
-        && request.auth.token.body_admin == true
+        && request.auth.token.authority_admin == true
         && exists(/databases/$(database)/documents/regulatoryBodyAdmins/$(request.auth.uid))
         && get(/databases/$(database)/documents/regulatoryBodyAdmins/$(request.auth.uid)).data.isActive != false;
     }
 
     function isAdminScopedForProfile(cadre) {
-      return isBodyAdmin()
+      return isAuthorityAdmin()
         && (cadre in get(/databases/$(database)/documents/regulatoryBodyAdmins/$(request.auth.uid)).data.scopedCadres)
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
           'credentialVerificationStatus',
@@ -98,13 +98,13 @@ service cloud.firestore {
 
     match /regulatoryBodyAdmins/{adminUid} {
       allow read: if isSignedIn()
-        && (isAdmin() || (request.auth.uid == adminUid && request.auth.token.body_admin == true));
+        && (isAdmin() || (request.auth.uid == adminUid && request.auth.token.authority_admin == true));
       allow write: if isAdmin();
     }
 
     match /verificationDocuments/{userId} {
       allow read: if isSignedIn()
-        && (request.auth.uid == userId || isAdmin() || isBodyAdmin());
+        && (request.auth.uid == userId || isAdmin() || isAuthorityAdmin());
 
       allow create: if isSignedIn()
         && request.auth.uid == userId
@@ -145,7 +145,7 @@ service cloud.firestore {
           ])
         )
         || (
-          (isAdmin() || isBodyAdmin())
+          (isAdmin() || isAuthorityAdmin())
           && request.resource.data.userId == resource.data.userId
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
             'reviewedAt',
@@ -165,7 +165,7 @@ service cloud.firestore {
         request.auth.uid == userId
         || isActiveMember()
         || isAdmin()
-        || isBodyAdmin()
+        || isAuthorityAdmin()
       );
       allow create: if isSignedIn() && request.auth.uid == userId;
       allow update: if isSignedIn() && (
@@ -181,7 +181,7 @@ service cloud.firestore {
         request.auth.uid == userId
         || isActiveMember()
         || isAdmin()
-        || isBodyAdmin()
+        || isAuthorityAdmin()
       );
       allow create, update: if isSignedIn() && request.auth.uid == userId;
       allow delete: if isAdmin();
@@ -189,7 +189,7 @@ service cloud.firestore {
     }
 
     match /jobPostings/{jobId} {
-      allow read: if isActiveMember() || isAdmin() || isBodyAdmin();
+      allow read: if isActiveMember() || isAdmin() || isAuthorityAdmin();
       allow create: if isActiveMember()
         && request.resource.data.organisationUserId == request.auth.uid
         && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.accountType == 'organisation';
@@ -208,7 +208,7 @@ service cloud.firestore {
     }
 
     match /availabilityPosts/{postId} {
-      allow read: if isActiveMember() || isAdmin() || isBodyAdmin();
+      allow read: if isActiveMember() || isAdmin() || isAuthorityAdmin();
       allow create: if isActiveMember()
         && request.resource.data.individualUserId == request.auth.uid
         && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.accountType == 'individual';
