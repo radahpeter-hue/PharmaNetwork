@@ -3,7 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
 import { collection, getDocs, query, where } from 'firebase/firestore';
 import { Button } from '../components/Button';
-import { PHARMA_CADRES, UGANDA_DISTRICTS } from '../constants';
+import { EMPLOYMENT_TYPES, PHARMA_CADRES, UGANDA_DISTRICTS } from '../constants';
 import { 
   Search, 
   MapPin, 
@@ -43,6 +43,7 @@ interface Professional {
   practisingLicenceYear?: number;
   profileCompleteness?: number;
   isDirectoryVisible?: boolean;
+  preferredEmploymentTypes?: string[];
 }
 
 const BrowseProfessionals: React.FC = () => {
@@ -52,9 +53,12 @@ const BrowseProfessionals: React.FC = () => {
   const [professionals, setProfessionals] = useState<Professional[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('');
   const [selectedDistrict, setSelectedDistrict] = useState('All');
   const [selectedCadre, setSelectedCadre] = useState('All');
-  const [selectedAvailability, setSelectedAvailability] = useState<'All' | 'actively_seeking' | 'open_to_offers'>('All');
+  const [selectedAvailability, setSelectedAvailability] = useState<'All' | 'actively_seeking' | 'open_to_offers' | 'not_available'>('All');
+  const [selectedExperience, setSelectedExperience] = useState('All');
+  const [selectedEmploymentType, setSelectedEmploymentType] = useState('All');
   const [verificationFilter, setVerificationFilter] = useState<'all' | 'verified' | 'licensed'>('all');
 
   // Slide-over messaging drawer state
@@ -89,11 +93,21 @@ const BrowseProfessionals: React.FC = () => {
     fetchProfessionals();
   }, []);
 
+  useEffect(() => {
+    const timeout = window.setTimeout(() => {
+      setDebouncedSearchQuery(searchQuery.trim());
+    }, 300);
+
+    return () => window.clearTimeout(timeout);
+  }, [searchQuery]);
+
   const handleClearFilters = () => {
     setSearchQuery('');
     setSelectedDistrict('All');
     setSelectedCadre('All');
     setSelectedAvailability('All');
+    setSelectedExperience('All');
+    setSelectedEmploymentType('All');
     setVerificationFilter('all');
   };
 
@@ -102,13 +116,15 @@ const BrowseProfessionals: React.FC = () => {
     selectedDistrict !== 'All' || 
     selectedCadre !== 'All' || 
     selectedAvailability !== 'All' ||
+    selectedExperience !== 'All' ||
+    selectedEmploymentType !== 'All' ||
     verificationFilter !== 'all';
 
   // Apply filters client-side
   const filteredProfessionals = professionals.filter((prof) => {
     // Search matching name, bio, qualification, registration
-    if (searchQuery.trim() !== '') {
-      const q = searchQuery.toLowerCase();
+    if (debouncedSearchQuery !== '') {
+      const q = debouncedSearchQuery.toLowerCase();
       const nameMatch = (prof.fullName || '').toLowerCase().includes(q);
       const bioMatch = (prof.bio || '').toLowerCase().includes(q);
       const qualMatch = (prof.qualification || '').toLowerCase().includes(q);
@@ -134,6 +150,14 @@ const BrowseProfessionals: React.FC = () => {
 
     // Availability status
     if (selectedAvailability !== 'All' && prof.availabilityStatus !== selectedAvailability) {
+      return false;
+    }
+
+    if (selectedExperience !== 'All' && String(prof.yearsExperience || '') !== selectedExperience) {
+      return false;
+    }
+
+    if (selectedEmploymentType !== 'All' && !(prof.preferredEmploymentTypes || []).includes(selectedEmploymentType)) {
       return false;
     }
 
@@ -237,12 +261,43 @@ const BrowseProfessionals: React.FC = () => {
               <label className="block text-[10px] font-black text-zinc-400 uppercase tracking-widest mb-1.5">Professional Availability</label>
               <select
                 value={selectedAvailability}
-                onChange={(e) => setSelectedAvailability(e.target.value as 'All' | 'actively_seeking' | 'open_to_offers')}
+                onChange={(e) => setSelectedAvailability(e.target.value as 'All' | 'actively_seeking' | 'open_to_offers' | 'not_available')}
                 className="w-full bg-zinc-50 border-none rounded-xl px-4 py-3 text-sm font-semibold text-zinc-700 outline-none focus:ring-2 focus:ring-primary/20 transition-all"
               >
                 <option value="All">Any Availability</option>
                 <option value="actively_seeking">Actively Seeking</option>
                 <option value="open_to_offers">Open to Offers</option>
+                <option value="not_available">Not Available</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-[10px] font-black text-zinc-400 uppercase tracking-widest mb-1.5">Years of Experience</label>
+              <select
+                value={selectedExperience}
+                onChange={(e) => setSelectedExperience(e.target.value)}
+                className="w-full bg-zinc-50 border-none rounded-xl px-4 py-3 text-sm font-semibold text-zinc-700 outline-none focus:ring-2 focus:ring-primary/20 transition-all"
+              >
+                <option value="All">Any Experience</option>
+                <option value="less_than_1">Less than 1 year</option>
+                <option value="1_to_3">1 to 3 years</option>
+                <option value="3_to_5">3 to 5 years</option>
+                <option value="5_to_10">5 to 10 years</option>
+                <option value="10_plus">10+ years</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-[10px] font-black text-zinc-400 uppercase tracking-widest mb-1.5">Employment Type</label>
+              <select
+                value={selectedEmploymentType}
+                onChange={(e) => setSelectedEmploymentType(e.target.value)}
+                className="w-full bg-zinc-50 border-none rounded-xl px-4 py-3 text-sm font-semibold text-zinc-700 outline-none focus:ring-2 focus:ring-primary/20 transition-all"
+              >
+                <option value="All">Any Employment Type</option>
+                {EMPLOYMENT_TYPES.map((type) => (
+                  <option key={type.id} value={type.id}>{type.label}</option>
+                ))}
               </select>
             </div>
 
