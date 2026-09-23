@@ -27,12 +27,6 @@ const CreateAvailabilityPost: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [toast, setToast] = useState({ isVisible: false, message: '', type: 'success' as ToastType });
 
-  // Access check
-  if (loading) return null;
-  if (!user || userAccount?.accountType !== 'individual') {
-    return <Navigate to="/dashboard" replace />;
-  }
-
   const indProfile = profile as IndividualProfile;
 
   useEffect(() => {
@@ -50,6 +44,13 @@ const CreateAvailabilityPost: React.FC = () => {
     };
     checkExisting();
   }, [user]);
+
+  // Access check
+  if (loading) return null;
+  if (!user || userAccount?.accountType !== 'individual') {
+    return <Navigate to="/dashboard" replace />;
+  }
+
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
