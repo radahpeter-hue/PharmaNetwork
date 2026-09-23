@@ -113,7 +113,7 @@ const CreateJobPosting: React.FC = () => {
         organisationName: selectedOrg.organisationName,
         organisationTypes: selectedOrg.organisationTypes,
         organisationDistrict: selectedOrg.district,
-        organisationLogoUrl: selectedOrg.logoUrl || ''
+        organisationLogoUrl: selectedOrg.logoUrl || '',
         ...formData,
         status: 'active',
         createdAt: now,
