@@ -6,13 +6,17 @@ import {
   initializeTestEnvironment
 } from '@firebase/rules-unit-testing';
 import {
+  collection,
   doc,
   getDoc,
+  getDocs,
   increment,
+  query,
   runTransaction,
   setDoc,
   Timestamp,
-  updateDoc
+  updateDoc,
+  where
 } from 'firebase/firestore';
 import { readFile } from 'node:fs/promises';
 
@@ -998,4 +1002,44 @@ test('expired non-confidential business private details are hidden from other me
 
   await assertFails(getDoc(doc(readerDb, 'businessListingPrivate', 'private-expired-listing')));
   await assertSucceeds(getDoc(doc(ownerDb, 'businessListingPrivate', 'private-expired-listing')));
+});
+
+
+test('member board queries satisfy active and unexpired read rules', async () => {
+  const now = Date.now();
+  const future = Timestamp.fromMillis(now + 24 * 60 * 60 * 1000);
+  const past = Timestamp.fromMillis(now - 24 * 60 * 60 * 1000);
+
+  await seed(async db => {
+    await setDoc(doc(db, 'users', 'board-reader'), {
+      id: 'board-reader',
+      accountType: 'individual',
+      accountClass: 'professional',
+      accountStatus: 'ACTIVE',
+      isActive: true,
+      isVerified: true
+    });
+    await setDoc(doc(db, 'jobPostings', 'board-job-active'), {
+      organisationUserId: 'another-org',
+      status: 'active',
+      expiresAt: future
+    });
+    await setDoc(doc(db, 'jobPostings', 'board-job-expired'), {
+      organisationUserId: 'another-org',
+      status: 'active',
+      expiresAt: past
+    });
+  });
+
+  const db = testEnv.authenticatedContext('board-reader').firestore();
+  const cutoff = Timestamp.now();
+  const boardQuery = query(
+    collection(db, 'jobPostings'),
+    where('status', '==', 'active'),
+    where('expiresAt', '>', cutoff)
+  );
+
+  const snapshot = await assertSucceeds(getDocs(boardQuery));
+  assert.equal(snapshot.size, 1);
+  assert.equal(snapshot.docs[0].id, 'board-job-active');
 });
