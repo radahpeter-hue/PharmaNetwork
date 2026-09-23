@@ -486,7 +486,8 @@ test('non-confidential business private contact details are available to active 
       sellerUserId: 'seller-public',
       isConfidential: false,
       photoUrls: [],
-      status: 'active'
+      status: 'active',
+      expiresAt: Timestamp.fromMillis(Date.now() + 24 * 60 * 60 * 1000)
     });
     await setDoc(doc(db, 'businessListingPrivate', 'business-public'), {
       sellerUserId: 'seller-public',
