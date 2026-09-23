@@ -221,6 +221,7 @@ export const BodyAdminConsole: React.FC = () => {
         credentialVerifiedByBody: adminProfile.authorityName,
         credentialVerifiedByUid: adminProfile.uid,
         credentialRejectionReason: '',
+        isDirectoryVisible: false,
         updatedAt: serverTimestamp()
       });
 
@@ -265,6 +266,7 @@ export const BodyAdminConsole: React.FC = () => {
       batch.update(pRef, {
         credentialVerificationStatus: 'rejected',
         credentialRejectionReason: rejectionReason,
+        isDirectoryVisible: false,
         updatedAt: serverTimestamp()
       });
 
@@ -311,6 +313,7 @@ export const BodyAdminConsole: React.FC = () => {
       batch.update(pRef, {
         credentialVerificationStatus: 'unverified',
         credentialRejectionReason: `More information required: ${requestInfoNotes}`,
+        isDirectoryVisible: false,
         updatedAt: serverTimestamp()
       });
 
@@ -368,6 +371,8 @@ export const BodyAdminConsole: React.FC = () => {
         licenceRenewalDate: Timestamp.fromDate(new Date(editRenewalDate)),
         licenceExpiryDate: Timestamp.fromDate(new Date(editExpiryDate)),
         licenceSuspensionReason: editLicenceStatus === 'suspended' ? editSuspensionReason : '',
+        isDirectoryVisible: nextAccountState.isActive
+          && Number(activeUpdateLicenceProfile.profileCompleteness || 0) >= 60,
         updatedAt: serverTimestamp()
       });
 
@@ -402,9 +407,12 @@ export const BodyAdminConsole: React.FC = () => {
       const batch = writeBatch(db);
 
       selectedProfileIds.forEach(id => {
+        const selectedProfile = profiles.find(profile => profile.id === id);
         batch.update(doc(db, 'individualProfiles', id), {
           practisingLicenceStatus: bulkTargetStatus,
           practisingLicenceYear: new Date().getFullYear(),
+          isDirectoryVisible: nextAccountState.isActive
+            && Number(selectedProfile?.profileCompleteness || 0) >= 60,
           updatedAt: serverTimestamp()
         });
 
