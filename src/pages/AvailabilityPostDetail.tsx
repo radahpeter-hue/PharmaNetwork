@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { db } from '../lib/firebase';
-import { doc, getDoc, updateDoc, increment, collection, addDoc, query, where, getDocs, Timestamp } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, increment, Timestamp, runTransaction } from 'firebase/firestore';
 import { Button } from '../components/Button';
 import { AvailabilityPost, OrganisationProfile } from '../types';
 import { Toast, ToastType } from '../components/Toast';
@@ -56,13 +56,9 @@ const AvailabilityPostDetail: React.FC = () => {
 
     const checkInterest = async () => {
       if (!user || userAccount?.accountType !== 'organisation' || !postId) return;
-      const q = query(
-        collection(db, 'interestEvents'),
-        where('actorId', '==', user.uid),
-        where('targetId', '==', postId)
-      );
-      const snap = await getDocs(q);
-      setHasInterest(!snap.empty);
+      const eventId = `availability_interest__${postId}__${user.uid}`;
+      const snap = await getDoc(doc(db, 'interestEvents', eventId));
+      setHasInterest(snap.exists());
     };
 
     fetchPost();
@@ -70,26 +66,39 @@ const AvailabilityPostDetail: React.FC = () => {
   }, [postId, user, userAccount]);
 
   const handleContact = async () => {
-    if (!post || !user || userAccount?.accountType !== 'organisation') return;
+    if (!post || !user || userAccount?.accountType !== 'organisation' || !post.id) return;
 
     try {
-      // 1. Log interest event
-      await addDoc(collection(db, 'interestEvents'), {
-        actorId: user.uid,
-        targetId: post.id,
-        type: 'availability_interest',
-        timestamp: Timestamp.now()
-      });
+      const eventId = `availability_interest__${post.id}__${user.uid}`;
+      const eventRef = doc(db, 'interestEvents', eventId);
+      const postRef = doc(db, 'availabilityPosts', post.id);
 
-      // 2. Increment count
-      await updateDoc(doc(db, 'availabilityPosts', post.id!), {
-        interestCount: increment(1)
+      const created = await runTransaction(db, async transaction => {
+        const existingInterest = await transaction.get(eventRef);
+        if (existingInterest.exists()) return false;
+
+        transaction.set(eventRef, {
+          actorId: user.uid,
+          targetId: post.id,
+          type: 'availability_interest',
+          timestamp: Timestamp.now()
+        });
+
+        transaction.update(postRef, {
+          interestCount: increment(1)
+        });
+
+        return true;
       });
 
       setHasInterest(true);
-      setToast({ isVisible: true, message: 'Contact logged.', type: 'success' });
+      setToast({
+        isVisible: true,
+        message: created ? 'Contact interest logged.' : 'Interest was already recorded.',
+        type: 'success'
+      });
 
-      // 3. Open contact link
+      // Open contact link
       const orgProfile = profile as OrganisationProfile;
       const orgName = orgProfile.organisations?.[0]?.organisationName || 'an organisation';
       const message = encodeURIComponent(`Hello ${post.fullName}, I saw your availability post on PharmaNetwork Uganda and would like to discuss an opportunity. I am from ${orgName}.`);
@@ -124,7 +133,10 @@ const AvailabilityPostDetail: React.FC = () => {
     </div>
   );
 
-  if (!post || post.status !== 'active') return (
+  const postExpired = !!post?.expiresAt
+    && (post.expiresAt.toMillis ? post.expiresAt.toMillis() : new Date(post.expiresAt).getTime()) <= Date.now();
+
+  if (!post || post.status !== 'active' || postExpired) return (
     <div className="max-w-2xl mx-auto px-4 py-20 text-center">
       <div className="w-16 h-16 bg-zinc-50 rounded-2xl flex items-center justify-center text-zinc-300 mx-auto mb-6">
         <AlertCircle size={32} />
