@@ -147,8 +147,7 @@ service cloud.firestore {
         'practisingLicenceYear',
         'licenceRenewalDate',
         'licenceExpiryDate',
-        'licenceSuspensionReason',
-        'isDirectoryVisible'
+        'licenceSuspensionReason'
       ]);
     }
 
@@ -298,7 +297,15 @@ service cloud.firestore {
         && request.auth.uid == userId
         && request.resource.data.isDirectoryVisible == false;
       allow update: if isSignedIn() && (
-        (request.auth.uid == userId && professionalVerificationFieldsUnchanged())
+        (
+          request.auth.uid == userId
+          && professionalVerificationFieldsUnchanged()
+          && request.resource.data.isDirectoryVisible
+            == (
+              get(/databases/$(database)/documents/users/$(userId)).data.isActive == true
+              && request.resource.data.profileCompleteness >= 60
+            )
+        )
         || isAdmin()
         || isAuthorityVerificationProfileUpdate(resource.data.primaryCadre)
         || isAuthorityComplianceProfileUpdate(resource.data.primaryCadre)
