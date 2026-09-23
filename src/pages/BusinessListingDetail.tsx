@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
-import { doc, getDoc, updateDoc, increment, collection, query, where, getDocs, Timestamp } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, collection, query, where, getDocs, Timestamp } from 'firebase/firestore';
 import { Button } from '../components/Button';
 import { Toast, ToastType } from '../components/Toast';
 import { ReportButton } from '../components/ReportButton';
@@ -63,15 +63,22 @@ export const BusinessListingDetail: React.FC = () => {
       const docRef = doc(db, 'businessListings', id);
       const docSnap = await getDoc(docRef);
       if (docSnap.exists()) {
-        const data = docSnap.data();
-        setListing({ ...data, id: docSnap.id });
-        
-        // Single atomic increment viewCount on load
-        try {
-          await updateDoc(docRef, { viewCount: increment(1) });
-        } catch (e) {
-          console.warn("Couldn't update listing viewCount", e);
+        const publicData = docSnap.data();
+        let mergedData = { ...publicData, id: docSnap.id };
+
+        const ownerViewing = !!user && user.uid === publicData.sellerUserId;
+        if (ownerViewing || publicData.isConfidential === false) {
+          try {
+            const privateSnap = await getDoc(doc(db, 'businessListingPrivate', docSnap.id));
+            if (privateSnap.exists()) {
+              mergedData = { ...mergedData, ...privateSnap.data() };
+            }
+          } catch (privateError) {
+            console.warn('Private business listing details are not available to this viewer.', privateError);
+          }
         }
+
+        setListing(mergedData);
       } else {
         setListing(null);
       }
@@ -98,7 +105,7 @@ export const BusinessListingDetail: React.FC = () => {
 
   useEffect(() => {
     fetchListing();
-  }, [id]);
+  }, [id, user]);
 
   useEffect(() => {
     if (listing) {
@@ -344,7 +351,7 @@ export const BusinessListingDetail: React.FC = () => {
           </div>
 
           {/* Photo gallery */}
-          {listing.photoUrls && listing.photoUrls.length > 0 ? (
+          {(!listing.isConfidential || isOwner) && listing.photoUrls && listing.photoUrls.length > 0 ? (
             <div className="bg-white p-6 md:p-8 rounded-3xl border border-zinc-100 shadow-sm space-y-4">
               <div className="w-full aspect-video rounded-2xl overflow-hidden bg-zinc-50 border border-zinc-100 relative">
                 <img 
@@ -670,7 +677,7 @@ export const BusinessListingDetail: React.FC = () => {
               Secure Vetting
             </h4>
             <p className="text-[11px] text-zinc-500 font-medium leading-relaxed">
-              PharmaNetwork Uganda secures confidentiality under automated transaction gates. All handbook files, listings, and conversations remain personal to matching registered users.
+              Confidential listings keep seller contact, exact location, licence details, and private photos behind protected member access. Use platform messaging to contact the seller without exposing those details.
             </p>
           </div>
 
