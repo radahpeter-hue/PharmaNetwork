@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
-import { collection, doc, getDocs, query, setDoc, Timestamp, where } from 'firebase/firestore';
+import { collection, doc, getDocs, query, Timestamp, where, writeBatch } from 'firebase/firestore';
 import { Button } from '../components/Button';
 import { UGANDA_DISTRICTS, CONTACT_METHODS } from '../constants';
 import { Toast, ToastType } from '../components/Toast';
@@ -164,15 +164,13 @@ export const CreateBusinessListing: React.FC = () => {
       }
 
       const now = Timestamp.now();
-      await setDoc(listingRef, {
+      const publicListing = {
         sellerUserId: user.uid,
         listingTitle: formData.listingTitle.trim(),
         isConfidential: formData.isConfidential,
         businessType: formData.businessType,
         district: formData.district,
-        locationDescription: formData.locationDescription.trim(),
         yearsInOperation: Number(formData.yearsInOperation) || 0,
-        ndaLicenceStatus: formData.ndaLicenceStatus,
         staffCount: Number(formData.staffCount) || 0,
         businessDescription: formData.businessDescription.trim(),
         askingPriceUGX: formData.askingPriceUGX ? Number(formData.askingPriceUGX) : null,
@@ -180,15 +178,28 @@ export const CreateBusinessListing: React.FC = () => {
         monthlySalesRange: formData.monthlySalesRange,
         reasonForSale: formData.reasonForSale,
         whatsIncluded,
-        contactMethod: formData.contactMethod,
-        contactDetail: formData.contactDetail.trim(),
-        contactName: formData.contactName.trim() || 'Seller',
-        photoUrls,
+        photoUrls: formData.isConfidential ? [] : photoUrls,
         status: 'active',
         createdAt: now,
         expiresAt: Timestamp.fromMillis(now.toMillis() + 90 * 24 * 60 * 60 * 1000),
         viewCount: 0
-      });
+      };
+
+      const privateListing = {
+        sellerUserId: user.uid,
+        locationDescription: formData.locationDescription.trim(),
+        ndaLicenceStatus: formData.ndaLicenceStatus,
+        contactMethod: formData.contactMethod,
+        contactDetail: formData.contactDetail.trim(),
+        contactName: formData.contactName.trim() || 'Seller',
+        photoUrls,
+        updatedAt: now
+      };
+
+      const batch = writeBatch(db);
+      batch.set(listingRef, publicListing);
+      batch.set(doc(db, 'businessListingPrivate', listingRef.id), privateListing);
+      await batch.commit();
 
       setToast({ isVisible: true, message: 'Business listed successfully!', type: 'success' });
       setTimeout(() => navigate(`/marketplace/businesses/${listingRef.id}`), 1200);
