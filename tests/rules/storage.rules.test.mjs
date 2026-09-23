@@ -208,3 +208,55 @@ test('scoped authority admin can read verification evidence only for governed ca
   await assertSucceeds(getBytes(ref(authorityStorage, 'verificationDocs/pharmacist-owner/registration_certificate')));
   await assertFails(getBytes(ref(authorityStorage, 'verificationDocs/technician-owner/registration_certificate')));
 });
+
+
+test('business photos are readable by active members only for non-confidential active listings', async () => {
+  await seedFirestore(async db => {
+    for (const uid of ['photo-seller-public', 'photo-seller-private', 'photo-reader']) {
+      await setDoc(doc(db, 'users', uid), {
+        id: uid,
+        accountType: 'individual',
+        accountClass: 'professional',
+        accountStatus: 'ACTIVE',
+        isActive: true,
+        isVerified: true
+      });
+    }
+
+    await setDoc(doc(db, 'businessListings', 'public-listing'), {
+      sellerUserId: 'photo-seller-public',
+      isConfidential: false,
+      status: 'active',
+      photoUrls: []
+    });
+    await setDoc(doc(db, 'businessListings', 'private-listing'), {
+      sellerUserId: 'photo-seller-private',
+      isConfidential: true,
+      status: 'active',
+      photoUrls: []
+    });
+  });
+
+  const publicOwnerStorage = testEnv.authenticatedContext('photo-seller-public').storage();
+  const privateOwnerStorage = testEnv.authenticatedContext('photo-seller-private').storage();
+
+  await assertSucceeds(uploadBytes(
+    ref(publicOwnerStorage, 'businessPhotos/photo-seller-public/public-listing/photo_1.jpg'),
+    new Uint8Array([1, 2, 3]),
+    { contentType: 'image/jpeg' }
+  ));
+  await assertSucceeds(uploadBytes(
+    ref(privateOwnerStorage, 'businessPhotos/photo-seller-private/private-listing/photo_1.jpg'),
+    new Uint8Array([1, 2, 3]),
+    { contentType: 'image/jpeg' }
+  ));
+
+  const readerStorage = testEnv.authenticatedContext('photo-reader').storage();
+
+  await assertSucceeds(getBytes(
+    ref(readerStorage, 'businessPhotos/photo-seller-public/public-listing/photo_1.jpg')
+  ));
+  await assertFails(getBytes(
+    ref(readerStorage, 'businessPhotos/photo-seller-private/private-listing/photo_1.jpg')
+  ));
+});
