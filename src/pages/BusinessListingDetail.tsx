@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
-import { doc, getDoc, updateDoc, collection, query, where, getDocs, Timestamp } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, collection, query, where, getDocs } from 'firebase/firestore';
 import { Button } from '../components/Button';
 import { Toast, ToastType } from '../components/Toast';
 import { ReportButton } from '../components/ReportButton';
@@ -31,6 +31,7 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import { ConversationView } from '../components/ConversationView';
 import { cn } from '../lib/utils';
+import { PostingQuotaExceededError, renewPostingWithQuota } from '../lib/postingQuota';
 
 const ALL_8_ITEMS = [
   { id: 'inventory', label: 'Inventory (stock at cost)' },
@@ -148,22 +149,30 @@ export const BusinessListingDetail: React.FC = () => {
   };
 
   const handleRenew = async () => {
-    if (!id) return;
+    if (!id || !user) return;
     try {
-      const ninetyDaysFromNow = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000);
-      await updateDoc(doc(db, 'businessListings', id), {
-        expiresAt: Timestamp.fromDate(ninetyDaysFromNow),
-        status: 'active'
+      const result = await renewPostingWithQuota({
+        quotaType: 'business',
+        ownerUid: user.uid,
+        postingId: id
       });
-      setListing((prev: any) => ({ 
-        ...prev, 
-        expiresAt: Timestamp.fromDate(ninetyDaysFromNow),
-        status: 'active' 
+      setListing((prev: any) => ({
+        ...prev,
+        expiresAt: result.expiresAt,
+        status: 'active'
       }));
       setToast({ isVisible: true, message: 'Listing renewed successfully for 90 days!', type: 'success' });
     } catch (err) {
       console.error("Failed to renew listing:", err);
-      setToast({ isVisible: true, message: 'Failed to renew listing.', type: 'error' });
+      if (err instanceof PostingQuotaExceededError) {
+        setToast({
+          isVisible: true,
+          message: 'Renewal would exceed the limit of 3 active business listings.',
+          type: 'error'
+        });
+      } else {
+        setToast({ isVisible: true, message: err instanceof Error ? err.message : 'Failed to renew listing.', type: 'error' });
+      }
     }
   };
 

@@ -25,6 +25,20 @@ const seed = async (callback) => {
   });
 };
 
+const quotaSlotRef = (db, ownerUid, type, slotKey) =>
+  doc(db, 'postingQuotaSlots', ownerUid, 'slots', `${type}_${slotKey}`);
+
+const setQuotaSlot = (transaction, db, { ownerUid, type, slotKey, postingId, expiresAt }) => {
+  transaction.set(quotaSlotRef(db, ownerUid, type, slotKey), {
+    ownerUserId: ownerUid,
+    resourceType: type,
+    slotKey,
+    postingId,
+    expiresAt,
+    updatedAt: Timestamp.now()
+  });
+};
+
 test.before(async () => {
   const firestoreRules = await readFile('firestore.rules', 'utf8');
 
@@ -532,28 +546,61 @@ test('opportunity creation rejects expiry windows beyond the allowed period', as
   const professionalDb = testEnv.authenticatedContext('professional-expiry').firestore();
   const now = Date.now();
 
-  await assertSucceeds(setDoc(doc(orgDb, 'jobPostings', 'job-valid-expiry'), {
-    organisationUserId: 'org-expiry',
-    status: 'active',
-    interestCount: 0,
-    createdAt: Timestamp.fromMillis(now),
-    expiresAt: Timestamp.fromMillis(now + 59 * 24 * 60 * 60 * 1000)
+  const validJobExpiry = Timestamp.fromMillis(now + 59 * 24 * 60 * 60 * 1000);
+  await assertSucceeds(runTransaction(orgDb, async transaction => {
+    transaction.set(doc(orgDb, 'jobPostings', 'job-valid-expiry'), {
+      organisationUserId: 'org-expiry',
+      status: 'active',
+      interestCount: 0,
+      quotaSlot: '0',
+      createdAt: Timestamp.fromMillis(now),
+      expiresAt: validJobExpiry
+    });
+    setQuotaSlot(transaction, orgDb, {
+      ownerUid: 'org-expiry',
+      type: 'job',
+      slotKey: '0',
+      postingId: 'job-valid-expiry',
+      expiresAt: validJobExpiry
+    });
   }));
 
-  await assertFails(setDoc(doc(orgDb, 'jobPostings', 'job-too-long'), {
-    organisationUserId: 'org-expiry',
-    status: 'active',
-    interestCount: 0,
-    createdAt: Timestamp.fromMillis(now),
-    expiresAt: Timestamp.fromMillis(now + 61 * 24 * 60 * 60 * 1000)
+  const tooLongJobExpiry = Timestamp.fromMillis(now + 61 * 24 * 60 * 60 * 1000);
+  await assertFails(runTransaction(orgDb, async transaction => {
+    transaction.set(doc(orgDb, 'jobPostings', 'job-too-long'), {
+      organisationUserId: 'org-expiry',
+      status: 'active',
+      interestCount: 0,
+      quotaSlot: '1',
+      createdAt: Timestamp.fromMillis(now),
+      expiresAt: tooLongJobExpiry
+    });
+    setQuotaSlot(transaction, orgDb, {
+      ownerUid: 'org-expiry',
+      type: 'job',
+      slotKey: '1',
+      postingId: 'job-too-long',
+      expiresAt: tooLongJobExpiry
+    });
   }));
 
-  await assertFails(setDoc(doc(professionalDb, 'availabilityPosts', 'availability-too-long'), {
-    individualUserId: 'professional-expiry',
-    status: 'active',
-    interestCount: 0,
-    createdAt: Timestamp.fromMillis(now),
-    expiresAt: Timestamp.fromMillis(now + 61 * 24 * 60 * 60 * 1000)
+  const tooLongAvailabilityExpiry = Timestamp.fromMillis(now + 61 * 24 * 60 * 60 * 1000);
+  await assertFails(runTransaction(professionalDb, async transaction => {
+    transaction.set(doc(professionalDb, 'availabilityPosts', 'availability-too-long'), {
+      individualUserId: 'professional-expiry',
+      status: 'active',
+      interestCount: 0,
+      quotaSlot: '0',
+      createdAt: Timestamp.fromMillis(now),
+      expiresAt: tooLongAvailabilityExpiry
+    });
+    setQuotaSlot(transaction, professionalDb, {
+      ownerUid: 'professional-expiry',
+      type: 'availability',
+      slotKey: '0',
+      postingId: 'availability-too-long',
+      expiresAt: tooLongAvailabilityExpiry
+    });
   }));
 });
 
@@ -602,27 +649,223 @@ test('business listings enforce 90-day expiry and immutable view count', async (
   const db = testEnv.authenticatedContext('business-rule-owner').firestore();
   const now = Date.now();
 
-  await assertSucceeds(setDoc(doc(db, 'businessListings', 'business-valid'), {
-    sellerUserId: 'business-rule-owner',
-    isConfidential: false,
-    photoUrls: [],
-    status: 'active',
-    viewCount: 0,
-    createdAt: Timestamp.fromMillis(now),
-    expiresAt: Timestamp.fromMillis(now + 89 * 24 * 60 * 60 * 1000)
+  const validBusinessExpiry = Timestamp.fromMillis(now + 89 * 24 * 60 * 60 * 1000);
+  await assertSucceeds(runTransaction(db, async transaction => {
+    transaction.set(doc(db, 'businessListings', 'business-valid'), {
+      sellerUserId: 'business-rule-owner',
+      isConfidential: false,
+      photoUrls: [],
+      status: 'active',
+      viewCount: 0,
+      quotaSlot: '0',
+      createdAt: Timestamp.fromMillis(now),
+      expiresAt: validBusinessExpiry
+    });
+    setQuotaSlot(transaction, db, {
+      ownerUid: 'business-rule-owner',
+      type: 'business',
+      slotKey: '0',
+      postingId: 'business-valid',
+      expiresAt: validBusinessExpiry
+    });
   }));
 
-  await assertFails(setDoc(doc(db, 'businessListings', 'business-too-long'), {
-    sellerUserId: 'business-rule-owner',
-    isConfidential: false,
-    photoUrls: [],
-    status: 'active',
-    viewCount: 0,
-    createdAt: Timestamp.fromMillis(now),
-    expiresAt: Timestamp.fromMillis(now + 91 * 24 * 60 * 60 * 1000)
+  const tooLongBusinessExpiry = Timestamp.fromMillis(now + 91 * 24 * 60 * 60 * 1000);
+  await assertFails(runTransaction(db, async transaction => {
+    transaction.set(doc(db, 'businessListings', 'business-too-long'), {
+      sellerUserId: 'business-rule-owner',
+      isConfidential: false,
+      photoUrls: [],
+      status: 'active',
+      viewCount: 0,
+      quotaSlot: '1',
+      createdAt: Timestamp.fromMillis(now),
+      expiresAt: tooLongBusinessExpiry
+    });
+    setQuotaSlot(transaction, db, {
+      ownerUid: 'business-rule-owner',
+      type: 'business',
+      slotKey: '1',
+      postingId: 'business-too-long',
+      expiresAt: tooLongBusinessExpiry
+    });
   }));
 
   await assertFails(updateDoc(doc(db, 'businessListings', 'business-valid'), {
     viewCount: 100
+  }));
+});
+
+
+test('job posting creation requires one of five authoritative quota slots', async () => {
+  await seed(async db => {
+    await setDoc(doc(db, 'users', 'quota-org'), {
+      id: 'quota-org',
+      accountType: 'organisation',
+      accountClass: 'organisation',
+      accountStatus: 'ACTIVE',
+      isActive: true,
+      isVerified: false
+    });
+  });
+
+  const db = testEnv.authenticatedContext('quota-org').firestore();
+  const now = Date.now();
+
+  await assertFails(setDoc(doc(db, 'jobPostings', 'job-without-slot'), {
+    organisationUserId: 'quota-org',
+    status: 'active',
+    interestCount: 0,
+    createdAt: Timestamp.fromMillis(now),
+    expiresAt: Timestamp.fromMillis(now + 30 * 24 * 60 * 60 * 1000)
+  }));
+
+  for (let index = 0; index < 5; index += 1) {
+    const slotKey = String(index);
+    const postingId = `quota-job-${index}`;
+    const expiresAt = Timestamp.fromMillis(now + (30 + index) * 24 * 60 * 60 * 1000);
+
+    await assertSucceeds(runTransaction(db, async transaction => {
+      transaction.set(doc(db, 'jobPostings', postingId), {
+        organisationUserId: 'quota-org',
+        status: 'active',
+        interestCount: 0,
+        quotaSlot: slotKey,
+        createdAt: Timestamp.fromMillis(now),
+        expiresAt
+      });
+      setQuotaSlot(transaction, db, {
+        ownerUid: 'quota-org',
+        type: 'job',
+        slotKey,
+        postingId,
+        expiresAt
+      });
+    }));
+  }
+
+  const sixthExpiry = Timestamp.fromMillis(now + 30 * 24 * 60 * 60 * 1000);
+  await assertFails(runTransaction(db, async transaction => {
+    transaction.set(doc(db, 'jobPostings', 'quota-job-sixth'), {
+      organisationUserId: 'quota-org',
+      status: 'active',
+      interestCount: 0,
+      quotaSlot: '5',
+      createdAt: Timestamp.fromMillis(now),
+      expiresAt: sixthExpiry
+    });
+    setQuotaSlot(transaction, db, {
+      ownerUid: 'quota-org',
+      type: 'job',
+      slotKey: '5',
+      postingId: 'quota-job-sixth',
+      expiresAt: sixthExpiry
+    });
+  }));
+});
+
+test('an occupied active quota slot cannot be reassigned to another availability post', async () => {
+  await seed(async db => {
+    await setDoc(doc(db, 'users', 'quota-professional'), {
+      id: 'quota-professional',
+      accountType: 'individual',
+      accountClass: 'professional',
+      accountStatus: 'ACTIVE',
+      isActive: true,
+      isVerified: true
+    });
+  });
+
+  const db = testEnv.authenticatedContext('quota-professional').firestore();
+  const now = Date.now();
+  const firstExpiry = Timestamp.fromMillis(now + 30 * 24 * 60 * 60 * 1000);
+
+  await assertSucceeds(runTransaction(db, async transaction => {
+    transaction.set(doc(db, 'availabilityPosts', 'availability-first'), {
+      individualUserId: 'quota-professional',
+      status: 'active',
+      interestCount: 0,
+      quotaSlot: '0',
+      createdAt: Timestamp.fromMillis(now),
+      expiresAt: firstExpiry
+    });
+    setQuotaSlot(transaction, db, {
+      ownerUid: 'quota-professional',
+      type: 'availability',
+      slotKey: '0',
+      postingId: 'availability-first',
+      expiresAt: firstExpiry
+    });
+  }));
+
+  const secondExpiry = Timestamp.fromMillis(now + 40 * 24 * 60 * 60 * 1000);
+  await assertFails(runTransaction(db, async transaction => {
+    transaction.set(doc(db, 'availabilityPosts', 'availability-second'), {
+      individualUserId: 'quota-professional',
+      status: 'active',
+      interestCount: 0,
+      quotaSlot: '0',
+      createdAt: Timestamp.fromMillis(now),
+      expiresAt: secondExpiry
+    });
+    setQuotaSlot(transaction, db, {
+      ownerUid: 'quota-professional',
+      type: 'availability',
+      slotKey: '0',
+      postingId: 'availability-second',
+      expiresAt: secondExpiry
+    });
+  }));
+});
+
+test('expired quota slots can be atomically reused', async () => {
+  const now = Date.now();
+
+  await seed(async db => {
+    await setDoc(doc(db, 'users', 'quota-reuse-owner'), {
+      id: 'quota-reuse-owner',
+      accountType: 'organisation',
+      accountClass: 'organisation',
+      accountStatus: 'ACTIVE',
+      isActive: true,
+      isVerified: false
+    });
+    await setDoc(doc(db, 'jobPostings', 'expired-old-job'), {
+      organisationUserId: 'quota-reuse-owner',
+      status: 'active',
+      interestCount: 0,
+      quotaSlot: '0',
+      createdAt: Timestamp.fromMillis(now - 70 * 24 * 60 * 60 * 1000),
+      expiresAt: Timestamp.fromMillis(now - 10 * 24 * 60 * 60 * 1000)
+    });
+    await setDoc(quotaSlotRef(db, 'quota-reuse-owner', 'job', '0'), {
+      ownerUserId: 'quota-reuse-owner',
+      resourceType: 'job',
+      slotKey: '0',
+      postingId: 'expired-old-job',
+      expiresAt: Timestamp.fromMillis(now - 10 * 24 * 60 * 60 * 1000),
+      updatedAt: Timestamp.fromMillis(now - 10 * 24 * 60 * 60 * 1000)
+    });
+  });
+
+  const db = testEnv.authenticatedContext('quota-reuse-owner').firestore();
+  const newExpiry = Timestamp.fromMillis(now + 30 * 24 * 60 * 60 * 1000);
+
+  await assertSucceeds(runTransaction(db, async transaction => {
+    transaction.set(doc(db, 'jobPostings', 'replacement-job'), {
+      organisationUserId: 'quota-reuse-owner',
+      status: 'active',
+      interestCount: 0,
+      quotaSlot: '0',
+      createdAt: Timestamp.fromMillis(now),
+      expiresAt: newExpiry
+    });
+    setQuotaSlot(transaction, db, {
+      ownerUid: 'quota-reuse-owner',
+      type: 'job',
+      slotKey: '0',
+      postingId: 'replacement-job',
+      expiresAt: newExpiry
+    });
   }));
 });

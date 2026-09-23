@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
-import { collection, query, where, getDocs, updateDoc, doc, Timestamp } from 'firebase/firestore';
+import { collection, query, where, getDocs, updateDoc, doc } from 'firebase/firestore';
 import { Button } from '../components/Button';
 import { Link, useNavigate } from 'react-router-dom';
 import { Toast, ToastType } from '../components/Toast';
@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../lib/utils';
+import { PostingQuotaExceededError, renewPostingWithQuota } from '../lib/postingQuota';
 
 interface MyListingsProps {
   isTab?: boolean;
@@ -82,17 +83,26 @@ export const MyListings: React.FC<MyListingsProps> = ({ isTab = false }) => {
   };
 
   const handleRenew = async (id: string) => {
+    if (!user) return;
     try {
-      const ninetyDaysFromNow = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000);
-      await updateDoc(doc(db, 'businessListings', id), {
-        expiresAt: Timestamp.fromDate(ninetyDaysFromNow),
-        status: 'active'
+      await renewPostingWithQuota({
+        quotaType: 'business',
+        ownerUid: user.uid,
+        postingId: id
       });
       setToast({ isVisible: true, message: 'Listing renewed for 90 days.', type: 'success' });
       fetchListings();
     } catch (err) {
       console.error('Failed to renew listing:', err);
-      setToast({ isVisible: true, message: 'Failed to renew listing.', type: 'error' });
+      if (err instanceof PostingQuotaExceededError) {
+        setToast({
+          isVisible: true,
+          message: 'Renewal would exceed the limit of 3 active business listings.',
+          type: 'error'
+        });
+      } else {
+        setToast({ isVisible: true, message: err instanceof Error ? err.message : 'Failed to renew listing.', type: 'error' });
+      }
     }
   };
 

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate, Navigate } from 'react-router-dom';
 import { db } from '../lib/firebase';
-import { collection, addDoc, query, where, getDocs, Timestamp } from 'firebase/firestore';
+import { collection, doc, query, where, getDocs, Timestamp } from 'firebase/firestore';
 import { Button } from '../components/Button';
 import { Toast, ToastType } from '../components/Toast';
 import { PROFESSIONAL_CADRES, UGANDA_DISTRICTS, EMPLOYMENT_TYPES, CONTACT_METHODS } from '../constants';
@@ -10,6 +10,7 @@ import { Briefcase, Building, MapPin, Phone, Mail, Clock, MessageSquare, AlertCi
 import { motion } from 'motion/react';
 import { OrganisationProfile } from '../types';
 import { cn } from '../lib/utils';
+import { createPostingWithQuota, PostingQuotaExceededError } from '../lib/postingQuota';
 
 const CreateJobPosting: React.FC = () => {
   const { user, userAccount, profile, loading } = useAuth();
@@ -121,13 +122,28 @@ const CreateJobPosting: React.FC = () => {
         interestCount: 0
       };
 
-      await addDoc(collection(db, 'jobPostings'), jobData);
+      const postingRef = doc(collection(db, 'jobPostings'));
+      await createPostingWithQuota({
+        quotaType: 'job',
+        ownerUid: user.uid,
+        postingRef,
+        postingData: jobData
+      });
 
       setToast({ isVisible: true, message: 'Your job posting is live.', type: 'success' });
       setTimeout(() => navigate('/jobs'), 2000);
     } catch (err) {
       console.error('Error creating job posting:', err);
-      setToast({ isVisible: true, message: 'Something went wrong. Please try again.', type: 'error' });
+      if (err instanceof PostingQuotaExceededError) {
+        setActiveJobCount(5);
+        setToast({
+          isVisible: true,
+          message: 'You have reached the limit of 5 active postings. Close an existing posting to create a new one.',
+          type: 'error'
+        });
+      } else {
+        setToast({ isVisible: true, message: 'Something went wrong. Please try again.', type: 'error' });
+      }
     } finally {
       setIsSubmitting(false);
     }

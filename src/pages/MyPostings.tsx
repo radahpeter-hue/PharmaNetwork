@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { db } from '../lib/firebase';
-import { collection, query, where, getDocs, updateDoc, doc, Timestamp } from 'firebase/firestore';
+import { collection, query, where, getDocs, updateDoc, doc } from 'firebase/firestore';
 import { Button } from '../components/Button';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { JobPosting, AvailabilityPost } from '../types';
@@ -22,6 +22,7 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../lib/utils';
 import { MyListings } from './MyListings';
+import { PostingQuotaExceededError, renewPostingWithQuota } from '../lib/postingQuota';
 
 export const MyPostings: React.FC = () => {
   const { user, userAccount, loading } = useAuth();
@@ -120,6 +121,14 @@ export const MyPostings: React.FC = () => {
   const currentJobList = filterList(jobPostings);
   const currentAvailList = filterList(availabilityPosts);
 
+  const canRenewOpportunity = (posting: JobPosting | AvailabilityPost) => {
+    if (posting.status === 'closed' || !posting.expiresAt) return false;
+    const expiresMillis = posting.expiresAt.toMillis
+      ? posting.expiresAt.toMillis()
+      : new Date(posting.expiresAt).getTime();
+    return expiresMillis <= Date.now();
+  };
+
   const handleAction = async (id: string, action: 'close' | 'renew', type: 'jobs' | 'availability') => {
     try {
       const col = type === 'jobs' ? 'jobPostings' : 'availabilityPosts';
@@ -129,18 +138,28 @@ export const MyPostings: React.FC = () => {
         await updateDoc(ref, { status: 'closed' });
         setToast({ isVisible: true, message: 'Posting closed.', type: 'success' });
       } else if (action === 'renew') {
-        const newExpiry = new Date(Date.now() + 60 * 24 * 60 * 60 * 1000);
-        await updateDoc(ref, {
-          status: 'active',
-          expiresAt: Timestamp.fromDate(newExpiry),
-          renewedAt: Timestamp.now()
+        if (!user) return;
+        await renewPostingWithQuota({
+          quotaType: type === 'jobs' ? 'job' : 'availability',
+          ownerUid: user.uid,
+          postingId: id
         });
         setToast({ isVisible: true, message: 'Posting renewed for 60 days.', type: 'success' });
       }
       fetchAllPostings();
     } catch (err) {
       console.error('Action failed:', err);
-      setToast({ isVisible: true, message: 'Action failed.', type: 'error' });
+      if (err instanceof PostingQuotaExceededError) {
+        setToast({
+          isVisible: true,
+          message: type === 'jobs'
+            ? 'Renewal would exceed the limit of 5 active job postings.'
+            : 'Renewal is blocked because another availability post is already active.',
+          type: 'error'
+        });
+      } else {
+        setToast({ isVisible: true, message: err instanceof Error ? err.message : 'Action failed.', type: 'error' });
+      }
     }
   };
 
@@ -315,11 +334,15 @@ export const MyPostings: React.FC = () => {
                       >
                         Close Listing
                       </button>
-                    ) : (
+                    ) : canRenewOpportunity(p) ? (
                       <Button variant="ghost" size="sm" className="gap-2 text-primary border-none" onClick={() => handleAction(p.id!, 'renew', mainTab)}>
                         <RotateCcw size={15} />
                         Renew for 60 days
                       </Button>
+                    ) : (
+                      <span className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest text-zinc-400">
+                        Closed
+                      </span>
                     )}
                   </div>
                 </motion.div>

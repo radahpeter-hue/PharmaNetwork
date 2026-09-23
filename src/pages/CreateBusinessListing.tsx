@@ -2,13 +2,14 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
-import { collection, doc, getDocs, query, Timestamp, where, writeBatch } from 'firebase/firestore';
+import { collection, doc, getDocs, query, Timestamp, where } from 'firebase/firestore';
 import { Button } from '../components/Button';
 import { UGANDA_DISTRICTS, CONTACT_METHODS } from '../constants';
 import { Toast, ToastType } from '../components/Toast';
 import { Store, EyeOff, ShieldCheck, ChevronRight, HelpCircle, Info, Image as ImageIcon, UploadCloud, X } from 'lucide-react';
 import { motion } from 'motion/react';
-import { getDownloadURL, getStorage, ref, uploadBytes } from 'firebase/storage';
+import { deleteObject, getDownloadURL, getStorage, ref, uploadBytes, type StorageReference } from 'firebase/storage';
+import { createPostingWithQuota, PostingQuotaExceededError } from '../lib/postingQuota';
 
 const WHAT_IS_INCLUDED_OPTIONS = [
   { id: 'inventory', label: 'Inventory / Stock' },
@@ -149,6 +150,7 @@ export const CreateBusinessListing: React.FC = () => {
     }
 
     setIsSubmitting(true);
+    const uploadedPhotoRefs: StorageReference[] = [];
 
     try {
       const listingRef = doc(collection(db, 'businessListings'));
@@ -160,6 +162,7 @@ export const CreateBusinessListing: React.FC = () => {
         const extension = file.type === 'image/png' ? 'png' : 'jpg';
         const photoRef = ref(storage, `businessPhotos/${user.uid}/${listingRef.id}/photo_${index + 1}.${extension}`);
         const uploaded = await uploadBytes(photoRef, file, { contentType: file.type });
+        uploadedPhotoRefs.push(uploaded.ref);
         photoUrls.push(await getDownloadURL(uploaded.ref));
       }
 
@@ -196,16 +199,32 @@ export const CreateBusinessListing: React.FC = () => {
         updatedAt: now
       };
 
-      const batch = writeBatch(db);
-      batch.set(listingRef, publicListing);
-      batch.set(doc(db, 'businessListingPrivate', listingRef.id), privateListing);
-      await batch.commit();
+      const privateRef = doc(db, 'businessListingPrivate', listingRef.id);
+      await createPostingWithQuota({
+        quotaType: 'business',
+        ownerUid: user.uid,
+        postingRef: listingRef,
+        postingData: publicListing,
+        companionWrite: transaction => {
+          transaction.set(privateRef, privateListing);
+        }
+      });
 
       setToast({ isVisible: true, message: 'Business listed successfully!', type: 'success' });
       setTimeout(() => navigate(`/marketplace/businesses/${listingRef.id}`), 1200);
     } catch (err) {
-      handleFirestoreError(err, OperationType.WRITE, 'businessListings');
-      setToast({ isVisible: true, message: 'Failed to post business listing.', type: 'error' });
+      await Promise.allSettled(uploadedPhotoRefs.map(photoRef => deleteObject(photoRef)));
+      if (err instanceof PostingQuotaExceededError) {
+        setActiveListingCount(3);
+        setToast({
+          isVisible: true,
+          message: 'You already have 3 active business listings. Close, sell, or withdraw one before creating another.',
+          type: 'error'
+        });
+      } else {
+        handleFirestoreError(err, OperationType.WRITE, 'businessListings');
+        setToast({ isVisible: true, message: 'Failed to post business listing.', type: 'error' });
+      }
     } finally {
       setIsSubmitting(false);
     }
