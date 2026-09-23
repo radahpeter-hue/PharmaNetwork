@@ -23,6 +23,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../lib/utils';
 import { useAuth } from '../context/AuthContext';
 import { AccountType, AvailabilityStatus, EmploymentType, OrganizationType, PrimaryCadre } from '../types';
+import { calculateProfessionalProfileCompleteness } from '../lib/profileCompleteness';
 
 const DISTRICTS = [
   'Kampala', 'Wakiso', 'Mukono', 'Entebbe', 'Gulu', 'Mbarara', 'Jinja', 'Mbale', 'Arua', 'Lira', 
@@ -62,7 +63,7 @@ const Register: React.FC = () => {
     qualificationYear: new Date().getFullYear(),
     yearsExperience: 'less_than_1',
     areasOfPractice: [] as string[],
-    availabilityStatus: 'actively_seeking' as AvailabilityStatus,
+    availabilityStatus: '' as AvailabilityStatus | '',
     preferredEmploymentTypes: [] as EmploymentType[],
     bio: ''
   });
@@ -90,6 +91,10 @@ const Register: React.FC = () => {
     try {
       if (baseInfo.password !== baseInfo.confirmPassword) {
         throw new Error('Passwords do not match');
+      }
+
+      if (accountType === 'individual' && !individualDetails.availabilityStatus) {
+        throw new Error('Please select your current professional availability status.');
       }
 
       // 1. Sign up user
@@ -160,17 +165,19 @@ const Register: React.FC = () => {
   };
 
   const calculateCompleteness = (type: AccountType) => {
-    if (type === 'individual') {
-      let score = 0;
-      if (baseInfo.fullName) score += 10;
-      if (baseInfo.phone) score += 10;
-      if (individualDetails.bio) score += 20;
-      if (individualDetails.registrationNumber) score += 20;
-      if (individualDetails.primaryCadre) score += 20;
-      if (individualDetails.areasOfPractice.length > 0) score += 20;
-      return score;
-    }
-    return 60;
+    if (type !== 'individual') return 60;
+
+    return calculateProfessionalProfileCompleteness({
+      fullName: baseInfo.fullName,
+      phone: baseInfo.phone,
+      district: baseInfo.district,
+      primaryCadre: individualDetails.primaryCadre,
+      availabilityStatus: individualDetails.availabilityStatus,
+      registrationNumber: individualDetails.registrationNumber,
+      qualification: individualDetails.qualification,
+      yearsExperience: individualDetails.yearsExperience,
+      bio: individualDetails.bio
+    });
   };
 
   if (!accountType) {
