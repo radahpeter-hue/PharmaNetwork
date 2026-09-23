@@ -38,7 +38,7 @@ const ALL_8_ITEMS = [
   { id: 'pharmacy_software', label: 'Pharmacy management software' },
   { id: 'supplier_relationships', label: 'Existing supplier relationships' },
   { id: 'client_base', label: 'Existing client base' },
-  { id: 'nda_licence', label: 'NDA licence (transfer subject to NDHPA approval)' },
+  { id: 'nda_licence', label: 'Regulatory licence / approval where applicable' },
   { id: 'lease_agreement', label: 'Lease agreement (transfer subject to landlord approval)' },
   { id: 'staff', label: 'Current staff (if buyer wishes to retain them)' },
 ];
@@ -56,6 +56,7 @@ export const BusinessListingDetail: React.FC = () => {
   const [toast, setToast] = useState({ isVisible: false, message: '', type: 'success' as ToastType });
 
   const isOwner = user && listing && user.uid === listing.sellerUserId;
+  const canViewPrivateDetails = !!listing && (!listing.isConfidential || !!isOwner);
 
   const fetchListing = async () => {
     if (!id) return;
@@ -307,9 +308,7 @@ export const BusinessListingDetail: React.FC = () => {
                 </span>
               )}
 
-              <span className="text-[10px] text-zinc-400 font-mono font-bold tracking-widest ml-auto">
-                VIEWED {listing.viewCount || 1} TIMES
-              </span>
+
             </div>
 
             <h1 className="text-2xl md:text-3xl font-black text-zinc-900 leading-tight tracking-tight mb-4">
@@ -337,7 +336,6 @@ export const BusinessListingDetail: React.FC = () => {
             </div>
           </div>
 
-          {/* Yellow Regulatory disclaimer notice */}
           <div className="bg-amber-50/70 border border-amber-200/70 rounded-2xl p-5 text-zinc-800 flex items-start gap-3.5 shadow-xs">
             <div className="p-1.5 bg-amber-100 text-amber-700 rounded-xl shrink-0 mt-0.5">
               <AlertTriangle size={16} />
@@ -345,7 +343,7 @@ export const BusinessListingDetail: React.FC = () => {
             <div>
               <span className="font-extrabold text-amber-900 block text-xs uppercase tracking-wider mb-1">Regulatory Notice</span>
               <p className="text-xs font-semibold text-zinc-700 leading-relaxed">
-                Pharmacy licences are not automatically transferable. The buyer must apply for a new or transferred licence from the National Drug and Health Products Authority (NDHPA). Verify the licence status independently before completing any purchase.
+                Any licence, permit, lease, or approval associated with a listed business remains subject to the requirements of the relevant authority or contracting party. Buyers should verify transferability and current status independently before completing a transaction.
               </p>
             </div>
           </div>
@@ -403,15 +401,17 @@ export const BusinessListingDetail: React.FC = () => {
               <h2 className="text-sm font-black uppercase text-zinc-400 tracking-widest">Business Details Dossier</h2>
               
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="bg-zinc-50/50 p-4 rounded-2xl border border-zinc-100/50">
-                  <span className="text-[10px] font-black uppercase text-zinc-400 tracking-wider block mb-1">NDA Licence Status</span>
-                  <span className={cn(
-                    "inline-block border text-[11px] font-bold px-2.5 py-0.5 rounded-full mt-1",
-                    licenceBadgeColor(listing.ndaLicenceStatus)
-                  )}>
-                    {licenceLabels[listing.ndaLicenceStatus] || listing.ndaLicenceStatus}
-                  </span>
-                </div>
+                {canViewPrivateDetails && listing.ndaLicenceStatus && (
+                  <div className="bg-zinc-50/50 p-4 rounded-2xl border border-zinc-100/50">
+                    <span className="text-[10px] font-black uppercase text-zinc-400 tracking-wider block mb-1">Licence / Approval Status</span>
+                    <span className={cn(
+                      "inline-block border text-[11px] font-bold px-2.5 py-0.5 rounded-full mt-1",
+                      licenceBadgeColor(listing.ndaLicenceStatus)
+                    )}>
+                      {licenceLabels[listing.ndaLicenceStatus] || listing.ndaLicenceStatus}
+                    </span>
+                  </div>
+                )}
 
                 <div className="bg-zinc-50/50 p-4 rounded-2xl border border-zinc-100/50">
                   <span className="text-[10px] font-black uppercase text-zinc-400 tracking-wider block mb-1">Years in Operation</span>
