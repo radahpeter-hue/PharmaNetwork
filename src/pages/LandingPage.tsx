@@ -49,7 +49,7 @@ const LandingPage: React.FC = () => {
               transition={{ duration: 0.6 }}
               className="text-5xl lg:text-7xl font-bold text-primary mb-6 tracking-tight leading-[1.1]"
             >
-              Uganda's Pharmaceutical Community, <span className="text-accent underline decoration-4 underline-offset-8">Connected.</span>
+              Uganda's Pharmaceutical & Health-Professions Community, <span className="text-accent underline decoration-4 underline-offset-8">Connected.</span>
             </motion.h1>
             <motion.p 
               initial={{ opacity: 0, y: 20 }}
@@ -57,7 +57,7 @@ const LandingPage: React.FC = () => {
               transition={{ duration: 0.6, delay: 0.1 }}
               className="text-lg lg:text-xl text-zinc-600 mb-10 leading-relaxed max-w-2xl"
             >
-              Find qualified pharmacy professionals. Discover suppliers. Build your network across the entire supply chain.
+              Connect with professionals, healthcare organisations, suppliers, and opportunities across Uganda's pharmaceutical and health-professions ecosystem.
             </motion.p>
             
             <motion.div 
@@ -80,7 +80,7 @@ const LandingPage: React.FC = () => {
               transition={{ delay: 0.5 }}
               className="text-zinc-400 text-sm italic"
             >
-              Free to join. Trusted by pharmacy professionals across Uganda.
+              Built for Uganda's pharmaceutical and health-professions ecosystem.
             </motion.p>
           </div>
         </div>
@@ -92,15 +92,15 @@ const LandingPage: React.FC = () => {
       {/* PROBLEM SECTION */}
       <section className="py-24 bg-zinc-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <h2 className="text-3xl lg:text-4xl font-bold text-zinc-900 mb-16 text-center">Finding the right person should not take months.</h2>
+          <h2 className="text-3xl lg:text-4xl font-bold text-zinc-900 mb-16 text-center">Finding the right professional should not take months.</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
             <div className="bg-white p-10 rounded-2xl shadow-sm border border-zinc-100 flex flex-col gap-6">
               <div className="w-14 h-14 bg-primary/10 rounded-xl flex items-center justify-center text-primary">
                 <Building2 size={32} />
               </div>
-              <h3 className="text-2xl font-bold text-primary">For Pharmacy Owners</h3>
+              <h3 className="text-2xl font-bold text-primary">For Pharmacy Owners & Health Organisations</h3>
               <p className="text-zinc-600 leading-relaxed">
-                Legally, every licensed pharmacy needs a supervising pharmacist. But finding one is slow and inefficient, often leading to compliance risks and operational delays.
+                Finding qualified professionals quickly can be difficult for pharmacies and health organisations, creating staffing gaps and operational delays.
               </p>
               <ul className="space-y-3 pt-4">
                 {['Direct access to verified cadres', 'Simplified recruitment', 'Secure compliance'].map((item) => (
@@ -118,7 +118,7 @@ const LandingPage: React.FC = () => {
               </div>
               <h3 className="text-2xl font-bold text-zinc-900">For Professionals</h3>
               <p className="text-zinc-600 leading-relaxed">
-                Qualified pharmaceutical professionals deserve better visibility than unstructured WhatsApp groups. Showcase your credentials to the right employers and distributors.
+                Qualified pharmaceutical and health professionals deserve structured professional visibility. Build a credible profile and connect with relevant organisations and opportunities.
               </p>
               <ul className="space-y-3 pt-4">
                 {['Professional profile hosting', 'Direct link to top pharmacies', 'Career growth opportunities'].map((item) => (
@@ -139,7 +139,7 @@ const LandingPage: React.FC = () => {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-12">
             {[
               { step: '1', title: 'Create your profile', desc: 'Sign up and showcase your professional qualifications or business details.', icon: Globe },
-              { step: '2', title: 'Connect with the right people', desc: 'Directly interact with pharmacy owners, distributors, and manufacturers.', icon: Network },
+              { step: '2', title: 'Connect with the right people', desc: 'Connect with healthcare organisations, suppliers, distributors, and professional peers.', icon: Network },
               { step: '3', title: 'Build Uganda\'s future', desc: 'Secure the supply chain and ensure every Ugandan has access to quality care.', icon: Stethoscope },
             ].map((item) => (
               <div key={item.step} className="flex flex-col items-center text-center group">
@@ -162,7 +162,7 @@ const LandingPage: React.FC = () => {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-16">
             <h2 className="text-3xl lg:text-4xl font-bold text-zinc-900 mb-4">Who is it for?</h2>
-            <p className="text-zinc-600 max-w-2xl mx-auto">Connecting every node in the pharmaceutical value chain.</p>
+            <p className="text-zinc-600 max-w-2xl mx-auto">Connecting professionals and organisations across the pharmaceutical and wider health-professions ecosystem.</p>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
             {[
@@ -205,7 +205,7 @@ const LandingPage: React.FC = () => {
                     </div>
                     <div>
                        <p className="font-bold">Verified Credentials</p>
-                       <p className="text-sm text-white/60">Automated verification checks</p>
+                       <p className="text-sm text-white/60">Authority-led verification workflow</p>
                     </div>
                  </div>
                  <div className="flex items-start gap-4">
@@ -231,7 +231,7 @@ const LandingPage: React.FC = () => {
       {/* FINAL CTA */}
       <section className="py-24 bg-zinc-50 border-t border-zinc-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-           <h2 className="text-4xl lg:text-5xl font-bold mb-8 tracking-tight">The pharmaceutical supply chain runs on people.</h2>
+           <h2 className="text-4xl lg:text-5xl font-bold mb-8 tracking-tight">Uganda's health and pharmaceutical ecosystem runs on people.</h2>
            <p className="text-xl text-zinc-600 mb-12 max-w-2xl mx-auto">Connect with yours today and be part of the future of Ugandan healthcare.</p>
            <div className="flex flex-col sm:flex-row justify-center gap-6">
               <Link to="/register?type=individual">

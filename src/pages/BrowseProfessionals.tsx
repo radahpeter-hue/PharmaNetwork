@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
-import { collection, getDocs, doc, getDoc, query, where } from 'firebase/firestore';
+import { collection, getDocs, query, where } from 'firebase/firestore';
 import { Button } from '../components/Button';
 import { PHARMA_CADRES, UGANDA_DISTRICTS } from '../constants';
 import { 
@@ -33,7 +33,7 @@ interface Professional {
   yearsExperience?: number | string;
   bio?: string;
   profilePhotoUrl?: string;
-  availabilityStatus?: 'available' | 'unavailable';
+  availabilityStatus?: 'actively_seeking' | 'open_to_offers' | 'not_available';
   totalProfileViews?: number;
   phone?: string;
   areasOfPractice?: string[];
@@ -41,6 +41,8 @@ interface Professional {
   credentialVerificationStatus?: 'unverified' | 'pending_review' | 'verified' | 'rejected';
   practisingLicenceStatus?: 'not_renewed' | 'renewed_current' | 'suspended' | 'lapsed';
   practisingLicenceYear?: number;
+  profileCompleteness?: number;
+  isDirectoryVisible?: boolean;
 }
 
 const BrowseProfessionals: React.FC = () => {
@@ -52,7 +54,7 @@ const BrowseProfessionals: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedDistrict, setSelectedDistrict] = useState('All');
   const [selectedCadre, setSelectedCadre] = useState('All');
-  const [selectedAvailability, setSelectedAvailability] = useState<'All' | 'available'>('All');
+  const [selectedAvailability, setSelectedAvailability] = useState<'All' | 'actively_seeking' | 'open_to_offers'>('All');
   const [verificationFilter, setVerificationFilter] = useState<'all' | 'verified' | 'licensed'>('all');
 
   // Slide-over messaging drawer state
@@ -62,7 +64,12 @@ const BrowseProfessionals: React.FC = () => {
     const fetchProfessionals = async () => {
       setLoading(true);
       try {
-        const querySnap = await getDocs(collection(db, 'individualProfiles'));
+        const professionalsQuery = query(
+          collection(db, 'individualProfiles'),
+          where('isDirectoryVisible', '==', true),
+          where('profileCompleteness', '>=', 60)
+        );
+        const querySnap = await getDocs(professionalsQuery);
         const list: Professional[] = [];
         querySnap.forEach((docSnap) => {
           list.push({
@@ -126,7 +133,7 @@ const BrowseProfessionals: React.FC = () => {
     }
 
     // Availability status
-    if (selectedAvailability === 'available' && prof.availabilityStatus !== 'available') {
+    if (selectedAvailability !== 'All' && prof.availabilityStatus !== selectedAvailability) {
       return false;
     }
 
@@ -148,7 +155,7 @@ const BrowseProfessionals: React.FC = () => {
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-12">
         <div>
           <h1 className="text-4xl font-extrabold text-zinc-950 tracking-tight">Healthcare Professionals</h1>
-          <p className="text-zinc-500 mt-2">Connect with certified pharmacists, dispensers, technicians, and sales personnel in Uganda.</p>
+          <p className="text-zinc-500 mt-2">Connect with active, verified professionals across Uganda's pharmaceutical and health-professions network.</p>
         </div>
 
         {userAccount?.accountType === 'individual' && (
@@ -227,14 +234,15 @@ const BrowseProfessionals: React.FC = () => {
 
             {/* Availability Filter */}
             <div>
-              <label className="block text-[10px] font-black text-zinc-400 uppercase tracking-widest mb-1.5">Hiring Status</label>
+              <label className="block text-[10px] font-black text-zinc-400 uppercase tracking-widest mb-1.5">Professional Availability</label>
               <select
                 value={selectedAvailability}
-                onChange={(e) => setSelectedAvailability(e.target.value as 'All' | 'available')}
+                onChange={(e) => setSelectedAvailability(e.target.value as 'All' | 'actively_seeking' | 'open_to_offers')}
                 className="w-full bg-zinc-50 border-none rounded-xl px-4 py-3 text-sm font-semibold text-zinc-700 outline-none focus:ring-2 focus:ring-primary/20 transition-all"
               >
-                <option value="All">Any Status</option>
-                <option value="available">Looking For Work</option>
+                <option value="All">Any Availability</option>
+                <option value="actively_seeking">Actively Seeking</option>
+                <option value="open_to_offers">Open to Offers</option>
               </select>
             </div>
 
@@ -312,7 +320,7 @@ const BrowseProfessionals: React.FC = () => {
                                 Verified Pro
                               </span>
                             )}
-                            {prof.availabilityStatus === 'available' && (
+                            {prof.availabilityStatus === 'actively_seeking' && (
                               <span className="relative flex h-2 w-2 rounded-full bg-green-500" title="Looking for opportunities">
                                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
                               </span>

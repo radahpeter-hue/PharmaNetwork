@@ -25,148 +25,75 @@ import { BodyAdminConsole } from './pages/BodyAdminConsole';
 import { PublicProfile } from './pages/PublicProfile';
 import BrowseProfessionals from './pages/BrowseProfessionals';
 import BrowseOrganisations from './pages/BrowseOrganisations';
-import { auth, db } from './lib/firebase';
-import { doc, getDoc } from 'firebase/firestore';
+import AccountStatus from './pages/AccountStatus';
 
-const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { user, loading } = useAuth();
-  
+const AuthenticatedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { user, userAccount, loading } = useAuth();
+
   if (loading) return (
     <div className="min-h-screen flex items-center justify-center">
       <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
     </div>
   );
-  
-  if (!user) return <Navigate to="/login" state={{ from: window.location.pathname }} />;
-  
+
+  if (!user || !userAccount) {
+    return <Navigate to="/login" state={{ from: window.location.pathname }} />;
+  }
+
+  return <>{children}</>;
+};
+
+const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { user, userAccount, loading } = useAuth();
+
+  if (loading) return (
+    <div className="min-h-screen flex items-center justify-center">
+      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+    </div>
+  );
+
+  if (!user || !userAccount) {
+    return <Navigate to="/login" state={{ from: window.location.pathname }} />;
+  }
+
+  if (userAccount.isActive === false || (userAccount.accountStatus && userAccount.accountStatus !== 'ACTIVE')) {
+    return <Navigate to="/account-status" replace />;
+  }
+
   return <>{children}</>;
 };
 
 const AdminProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { user, loading } = useAuth();
-  const [isAdmin, setIsAdmin] = React.useState<boolean | null>(null);
-  const [checking, setChecking] = React.useState(true);
-  
-  React.useEffect(() => {
-    if (loading) return;
-    if (!user) {
-      setIsAdmin(false);
-      setChecking(false);
-      return;
-    }
-    
-    let active = true;
-    
-    const checkAdminStatus = async () => {
-      try {
-        const idTokenResult = await auth.currentUser?.getIdTokenResult();
-        if (idTokenResult?.claims.admin) {
-          if (active) setIsAdmin(true);
-          return;
-        }
-        
-        const email = auth.currentUser?.email;
-        if (email === 'liamradah10@gmail.com' || email === 'admin.peter@pharmagh.com') {
-          if (active) setIsAdmin(true);
-          return;
-        }
+  const { user, userAccount, isPlatformAdmin, loading } = useAuth();
 
-        const adminDocRef = doc(db, 'admins', user.uid);
-        const adminDocSnap = await getDoc(adminDocRef);
-        if (adminDocSnap.exists()) {
-          if (active) setIsAdmin(true);
-        } else {
-          if (active) setIsAdmin(false);
-        }
-      } catch (err) {
-        console.error("Admin check error on route:", err);
-        if (active) setIsAdmin(false);
-      } finally {
-        if (active) setChecking(false);
-      }
-    };
-    
-    checkAdminStatus();
-      
-    return () => {
-      active = false;
-    };
-  }, [user, loading]);
-  
-  if (loading || checking) return (
+  if (loading) return (
     <div className="min-h-screen bg-zinc-50 flex items-center justify-center">
       <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
     </div>
   );
-  
+
   if (!user) return <Navigate to="/login" state={{ from: window.location.pathname }} />;
-  
-  if (!isAdmin) return <Navigate to="/dashboard" />;
-  
+  if (!isPlatformAdmin) {
+    return <Navigate to={userAccount ? '/dashboard' : '/login'} replace />;
+  }
+
   return <>{children}</>;
 };
 
-const BodyAdminProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { user, loading } = useAuth();
-  const [isBodyAdmin, setIsBodyAdmin] = React.useState<boolean | null>(null);
-  const [checking, setChecking] = React.useState(true);
-  
-  React.useEffect(() => {
-    if (loading) return;
-    if (!user) {
-      setIsBodyAdmin(false);
-      setChecking(false);
-      return;
-    }
-    
-    let active = true;
-    
-    const checkStatus = async () => {
-      try {
-        const idTokenResult = await auth.currentUser?.getIdTokenResult();
-        if (idTokenResult?.claims.body_admin) {
-          if (active) setIsBodyAdmin(true);
-          return;
-        }
-        
-        const email = auth.currentUser?.email;
-        if (email === 'psu.admin@demo.pnu.ug' || email === 'ahpc.admin@demo.pnu.ug') {
-          if (active) setIsBodyAdmin(true);
-          return;
-        }
+const AuthorityAdminProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { user, userAccount, isAuthorityAdmin, loading } = useAuth();
 
-        const adminDocRef = doc(db, 'regulatoryBodyAdmins', user.uid);
-        const adminDocSnap = await getDoc(adminDocRef);
-        if (adminDocSnap.exists() && adminDocSnap.data().isActive !== false) {
-          if (active) setIsBodyAdmin(true);
-        } else {
-          if (active) setIsBodyAdmin(false);
-        }
-      } catch (err) {
-        console.error("Regulatory check error on route:", err);
-        if (active) setIsBodyAdmin(false);
-      } finally {
-        if (active) setChecking(false);
-      }
-    };
-    
-    checkStatus();
-      
-    return () => {
-      active = false;
-    };
-  }, [user, loading]);
-  
-  if (loading || checking) return (
+  if (loading) return (
     <div className="min-h-screen bg-zinc-50 flex items-center justify-center">
       <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#1A237E]"></div>
     </div>
   );
-  
+
   if (!user) return <Navigate to="/login" state={{ from: window.location.pathname }} />;
-  
-  if (!isBodyAdmin) return <Navigate to="/dashboard" />;
-  
+  if (!isAuthorityAdmin) {
+    return <Navigate to={userAccount ? '/dashboard' : '/login'} replace />;
+  }
+
   return <>{children}</>;
 };
 
@@ -189,13 +116,21 @@ function App() {
                   </ProtectedRoute>
                 } 
               />
-              <Route 
-                path="/profile" 
+              <Route
+                path="/account-status"
                 element={
-                  <ProtectedRoute>
+                  <AuthenticatedRoute>
+                    <AccountStatus />
+                  </AuthenticatedRoute>
+                }
+              />
+              <Route
+                path="/profile"
+                element={
+                  <AuthenticatedRoute>
                     <Profile />
-                  </ProtectedRoute>
-                } 
+                  </AuthenticatedRoute>
+                }
               />
               <Route 
                 path="/jobs" 
@@ -301,14 +236,15 @@ function App() {
                   </AdminProtectedRoute>
                 } 
               />
-              <Route 
-                path="/body-admin" 
+              <Route
+                path="/authority-admin"
                 element={
-                  <BodyAdminProtectedRoute>
+                  <AuthorityAdminProtectedRoute>
                     <BodyAdminConsole />
-                  </BodyAdminProtectedRoute>
-                } 
+                  </AuthorityAdminProtectedRoute>
+                }
               />
+              <Route path="/body-admin" element={<Navigate to="/authority-admin" replace />} />
               <Route 
                 path="/professionals/:uid" 
                 element={

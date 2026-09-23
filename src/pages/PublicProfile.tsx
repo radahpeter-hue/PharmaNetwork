@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { db } from '../lib/firebase';
-import { doc, getDoc, updateDoc, increment as firestoreIncrement } from 'firebase/firestore';
-import { IndividualProfile, OrganisationProfile, UserAccount } from '../types';
+import { doc, getDoc } from 'firebase/firestore';
+import { IndividualProfile, OrganisationProfile } from '../types';
 import { Button } from '../components/Button';
 import { ReportButton } from '../components/ReportButton';
 import { 
@@ -26,53 +26,41 @@ export const PublicProfile: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const [loading, setLoading] = useState(true);
-  const [userAccount, setUserAccount] = useState<UserAccount | null>(null);
   const [profile, setProfile] = useState<IndividualProfile | OrganisationProfile | null>(null);
   const [errorOnLoad, setErrorOnLoad] = useState<string | null>(null);
+
+  const isIndividual = location.pathname.startsWith('/professionals/');
 
   useEffect(() => {
     if (!uid) return;
 
-    const fetchPublicProfile = async () => {
+    const fetchMemberProfile = async () => {
       setLoading(true);
       setErrorOnLoad(null);
-      try {
-        const userDocRef = doc(db, 'users', uid);
-        const userDocSnap = await getDoc(userDocRef);
 
-        if (!userDocSnap.exists()) {
-          setErrorOnLoad("User account not found or has been removed.");
-          setLoading(false);
+      try {
+        const profileCollection = isIndividual ? 'individualProfiles' : 'organisationProfiles';
+        const profileDocRef = doc(db, profileCollection, uid);
+        const profileDocSnap = await getDoc(profileDocRef);
+
+        if (!profileDocSnap.exists()) {
+          setProfile(null);
+          setErrorOnLoad('This member profile is not currently available.');
           return;
         }
 
-        const uAcc = userDocSnap.data() as UserAccount;
-        setUserAccount(uAcc);
-
-        const profileColl = uAcc.accountType === 'individual' ? 'individualProfiles' : 'organisationProfiles';
-        const profileDocRef = doc(db, profileColl, uid);
-        const profileDocSnap = await getDoc(profileDocRef);
-
-        if (profileDocSnap.exists()) {
-          setProfile(profileDocSnap.data() as IndividualProfile | OrganisationProfile);
-          if (uAcc.accountType === 'individual') {
-            await updateDoc(profileDocRef, {
-              totalProfileViews: firestoreIncrement(1)
-            }).catch(e => console.warn('Failed to increment views:', e));
-          }
-        } else {
-          setErrorOnLoad("Profile has not been fully registered yet.");
-        }
+        setProfile(profileDocSnap.data() as IndividualProfile | OrganisationProfile);
       } catch (err) {
-        console.error("Error loading public profile:", err);
-        setErrorOnLoad("Unable to retrieve public profile details at this time.");
+        console.error('Error loading member profile:', err);
+        setProfile(null);
+        setErrorOnLoad('Unable to retrieve this member profile at this time.');
       } finally {
         setLoading(false);
       }
     };
 
-    fetchPublicProfile();
-  }, [uid]);
+    fetchMemberProfile();
+  }, [uid, isIndividual]);
 
   const goBackAndPrev = () => {
     if (window.history.length > 1) {
@@ -91,7 +79,7 @@ export const PublicProfile: React.FC = () => {
     );
   }
 
-  if (errorOnLoad || !userAccount) {
+  if (errorOnLoad || !profile) {
     return (
       <div className="max-w-md mx-auto px-6 py-16 text-center">
         <div className="w-16 h-16 bg-red-50 text-red-500 rounded-3xl flex items-center justify-center mx-auto mb-6">
@@ -108,7 +96,6 @@ export const PublicProfile: React.FC = () => {
     );
   }
 
-  const isIndividual = userAccount.accountType === 'individual';
   const indProfile = isIndividual ? (profile as IndividualProfile) : null;
   const orgProfile = !isIndividual ? (profile as OrganisationProfile) : null;
 
@@ -128,9 +115,9 @@ export const PublicProfile: React.FC = () => {
           <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-10"></div>
           {/* Active indicator */}
           <div className="absolute top-4 right-4 bg-white/20 backdrop-blur-md px-3.5 py-1.5 rounded-full flex items-center gap-2 border border-white/15">
-            <span className={`w-2.5 h-2.5 rounded-full ${userAccount.isActive ? 'bg-green-400 animate-pulse' : 'bg-red-400'}`}></span>
+            <span className="w-2.5 h-2.5 rounded-full bg-green-400"></span>
             <span className="text-[10px] text-white font-black uppercase tracking-wider">
-              {userAccount.isActive ? 'Account Active' : 'Deactivated'}
+              Member Profile
             </span>
           </div>
         </div>
@@ -170,7 +157,7 @@ export const PublicProfile: React.FC = () => {
                 {isIndividual ? indProfile?.district : orgProfile?.organisations?.[0]?.district || 'Uganda'}
               </span>
               <span className="flex items-center gap-1.5 uppercase text-xs bg-zinc-100 text-zinc-700 font-extrabold px-3 py-1 rounded-full">
-                {userAccount.accountType === 'individual' ? 'Professional' : 'Organisation Office'}
+                {isIndividual ? 'Professional' : 'Organisation Office'}
               </span>
             </div>
 
@@ -203,7 +190,7 @@ export const PublicProfile: React.FC = () => {
             {isIndividual ? (
               <div className="space-y-4 text-sm font-semibold text-zinc-600">
                 <div>
-                  <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block mb-0.5 font-sans">PSU Registration No.</label>
+                  <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block mb-0.5 font-sans">Professional Registration No.</label>
                   <p className="text-zinc-900 flex items-center gap-1.5 font-semibold text-xs leading-none">
                     <ShieldCheck size={16} className="text-emerald-500" />
                     {indProfile?.registrationNumber || 'Pending Verification'}

@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { auth, db, handleFirestoreError, OperationType } from '../lib/firebase';
 import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
-import { doc, setDoc, addDoc, collection, serverTimestamp, increment } from 'firebase/firestore';
+import { doc, setDoc, addDoc, collection, serverTimestamp } from 'firebase/firestore';
 import { Button } from '../components/Button';
 import { 
   User, 
@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../lib/utils';
+import { useAuth } from '../context/AuthContext';
 import { AccountType, AvailabilityStatus, EmploymentType, OrganizationType, PrimaryCadre } from '../types';
 
 const DISTRICTS = [
@@ -33,6 +34,7 @@ type RegistrationStep = 1 | 2 | 3 | 4;
 const Register: React.FC = () => {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
+  const { refreshUserData } = useAuth();
   const initialType = (searchParams.get('type') as AccountType) || null;
   
   const [step, setStep] = useState<RegistrationStep>(1);
@@ -105,10 +107,14 @@ const Register: React.FC = () => {
       });
 
       // 2. Create user account record
+      const isProfessional = accountType === 'individual';
+
       await setDoc(doc(db, 'users', userId), {
         id: userId,
         accountType: accountType,
-        isActive: true,
+        accountClass: isProfessional ? 'professional' : 'organisation',
+        accountStatus: isProfessional ? 'PENDING_PROFILE' : 'ACTIVE',
+        isActive: !isProfessional,
         isVerified: false,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp()
@@ -131,6 +137,7 @@ const Register: React.FC = () => {
           bio: individualDetails.bio,
           roles: individualRoles,
           profileCompleteness: calculateCompleteness('individual'),
+          isDirectoryVisible: false,
           createdAt: serverTimestamp(),
           updatedAt: serverTimestamp()
         });
@@ -143,23 +150,7 @@ const Register: React.FC = () => {
         });
       }
 
-      // 4. Update platform stats counts
-      const statsRef = doc(db, 'platformStats', 'counts');
-      let statsUpdates: Record<string, any> = {};
-      if (accountType === 'individual') {
-        if (individualDetails.primaryCadre === 'pharmacist') {
-          statsUpdates.registeredPharmacists = increment(1);
-        } else {
-          statsUpdates.auxiliaryProfessionals = increment(1);
-        }
-      } else if (accountType === 'organisation') {
-        statsUpdates.pharmacyOwners = increment(1);
-      }
-
-      if (Object.keys(statsUpdates).length > 0) {
-        await setDoc(statsRef, statsUpdates, { merge: true });
-      }
-
+      await refreshUserData();
       setStep(4);
     } catch (err: any) {
       handleFirestoreError(err, OperationType.WRITE, 'registration');
@@ -198,8 +189,8 @@ const Register: React.FC = () => {
                 <div className="w-16 h-16 bg-primary/10 rounded-2xl flex items-center justify-center text-primary mb-8 group-hover:scale-110 transition-transform">
                   <User size={32} />
                 </div>
-                <h2 className="text-2xl font-bold mb-4">Individual Professional</h2>
-                <p className="text-zinc-500 text-sm leading-relaxed mb-6">For pharmacists, technicians, and specialized professionals looking to build their career network.</p>
+                <h2 className="text-2xl font-bold mb-4">Professional</h2>
+                <p className="text-zinc-500 text-sm leading-relaxed mb-6">For pharmacy and health professionals creating a verified professional profile and network.</p>
                 <ChevronRight className="text-zinc-300 group-hover:text-primary transition-colors" />
               </button>
 
@@ -321,7 +312,7 @@ const Register: React.FC = () => {
                       onChange={e => setBaseInfo({...baseInfo, termsAccepted: e.target.checked})}
                     />
                     <span className="text-xs text-zinc-500 leading-relaxed">
-                      By registering you agree to our <Link to="/terms" className="text-primary font-bold">Terms of Use</Link> and <Link to="/privacy" className="text-primary font-bold">Privacy Policy</Link>. PharmaNetwork Uganda displays registration numbers as self-declared. Employers are responsible for verifying credentials with relevant authorities.
+                      By registering you agree to our <Link to="/terms" className="text-primary font-bold">Terms of Use</Link> and <Link to="/privacy" className="text-primary font-bold">Privacy Policy</Link>. Professional registration details are submitted for verification within PharmaNetwork. Registration alone does not grant access to the member network.
                     </span>
                  </label>
               </div>
@@ -343,7 +334,7 @@ const Register: React.FC = () => {
                exit={{ opacity: 0, x: -20 }}
                className="bg-white p-8 lg:p-12 rounded-3xl shadow-sm border border-zinc-100"
             >
-               <h2 className="text-3xl font-bold text-zinc-900 mb-4">Tell us how you are part of the pharmaceutical community.</h2>
+               <h2 className="text-3xl font-bold text-zinc-900 mb-4">Tell us about your professional role.</h2>
                <p className="text-zinc-500 mb-10">Select all that apply. You can update this at any time.</p>
 
                <div className="space-y-4 mb-12">
@@ -461,8 +452,14 @@ const Register: React.FC = () => {
                 <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-8 text-green-600">
                    <CheckCircle2 size={40} />
                 </div>
-                <h2 className="text-4xl font-bold text-zinc-900 mb-4">Welcome to the Network!</h2>
-                <p className="text-zinc-500 mb-10 max-w-sm mx-auto">Your account has been created. Start connecting and building your professional future.</p>
+                <h2 className="text-4xl font-bold text-zinc-900 mb-4">
+                  {accountType === 'individual' ? 'Registration received' : 'Organisation account created'}
+                </h2>
+                <p className="text-zinc-500 mb-10 max-w-md mx-auto">
+                  {accountType === 'individual'
+                    ? 'Your professional account has been created. Complete your profile and submit the required verification information. Member-network access begins after verification and activation.'
+                    : 'Your organisation account has been created and is ready to use.'}
+                </p>
                 
                 <div className="bg-zinc-50 p-8 rounded-2xl mb-10 text-left">
                    <div className="flex justify-between items-center mb-4">
@@ -474,11 +471,18 @@ const Register: React.FC = () => {
                    </div>
                    <div className="space-y-3">
                       <p className="text-xs font-bold text-zinc-400">NEXT STEPS:</p>
-                      {[
-                        'Add a profile photo',
-                        'Upload your CV / Qualifications',
-                        'Connect with 5 professionals'
-                      ].map(step => (
+                      {(accountType === 'individual'
+                        ? [
+                            'Add a profile photo',
+                            'Upload your CV / Qualifications',
+                            'Submit professional verification documents'
+                          ]
+                        : [
+                            'Review your organisation details',
+                            'Add complete contact information',
+                            'Start building your organisation profile'
+                          ]
+                      ).map(step => (
                         <div key={step} className="flex items-center gap-3 text-sm text-zinc-600 hover:text-primary cursor-pointer group">
                            <div className="w-5 h-5 rounded-full border border-zinc-200 group-hover:border-primary transition-colors"></div>
                            {step}
@@ -487,7 +491,13 @@ const Register: React.FC = () => {
                    </div>
                 </div>
 
-                <Button fullWidth size="lg" onClick={() => navigate('/dashboard')}>Go to my dashboard</Button>
+                <Button
+                  fullWidth
+                  size="lg"
+                  onClick={() => navigate(accountType === 'individual' ? '/account-status' : '/dashboard')}
+                >
+                  {accountType === 'individual' ? 'View account status' : 'Go to my dashboard'}
+                </Button>
              </motion.div>
           )}
         </AnimatePresence>

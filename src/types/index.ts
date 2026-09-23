@@ -1,5 +1,52 @@
 export type AccountType = 'individual' | 'organisation';
 
+export type AccountClass =
+  | 'professional'
+  | 'organisation'
+  | 'professional_authority'
+  | 'platform_admin';
+
+export type AccountStatus =
+  | 'PENDING_PROFILE'
+  | 'PENDING_AUTHORITY_VERIFICATION'
+  | 'MORE_INFORMATION_REQUIRED'
+  | 'ACTIVE'
+  | 'INACTIVE_ANNUAL_COMPLIANCE'
+  | 'SUSPENDED_BY_AUTHORITY'
+  | 'REJECTED'
+  | 'DEACTIVATED_BY_PLATFORM';
+
+export type AuthorityRole =
+  | 'authority_super_admin'
+  | 'verification_officer'
+  | 'compliance_officer'
+  | 'communications_officer'
+  | 'reviewer';
+
+export interface ProfessionalAuthority {
+  id: string;
+  name: string;
+  shortName?: string;
+  governedCadres: PrimaryCadre[];
+  isActive: boolean;
+  createdAt: any;
+  updatedAt: any;
+}
+
+export interface ProfessionalAuthorityAdmin {
+  uid: string;
+  fullName: string;
+  email: string;
+  authorityId: string;
+  authorityName: string;
+  scopedCadres: PrimaryCadre[];
+  role: AuthorityRole;
+  isActive: boolean;
+  notes?: string;
+  addedAt?: any;
+  lastLoginAt?: any;
+}
+
 export type PrimaryCadre = 
   | 'pharmacist' 
   | 'pharmacy_technician' 
@@ -32,6 +79,8 @@ export type OrganizationType =
 export interface UserAccount {
   id: string;
   accountType: AccountType;
+  accountClass?: AccountClass;
+  accountStatus?: AccountStatus;
   isActive: boolean;
   isVerified: boolean;
   createdAt: any;
@@ -55,6 +104,7 @@ export interface IndividualProfile {
   profilePhotoUrl?: string;
   cvUrl?: string;
   profileCompleteness: number;
+  isDirectoryVisible?: boolean;
   createdAt: any;
   updatedAt: any;
   // Verification updates (Part 10 & 11)

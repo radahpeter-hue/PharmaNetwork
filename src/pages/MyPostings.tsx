@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { db } from '../lib/firebase';
-import { collection, query, where, getDocs, updateDoc, doc, increment, Timestamp } from 'firebase/firestore';
+import { collection, query, where, getDocs, updateDoc, doc, Timestamp } from 'firebase/firestore';
 import { Button } from '../components/Button';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { JobPosting, AvailabilityPost } from '../types';
@@ -127,13 +127,6 @@ export const MyPostings: React.FC = () => {
 
       if (action === 'close') {
         await updateDoc(ref, { status: 'closed' });
-        if (type === 'jobs') {
-          try {
-            await updateDoc(doc(db, 'platformStats', 'counts'), { activeOpportunities: increment(-1) });
-          } catch (e) {
-            console.warn("Couldn't update system opportunities count: ", e);
-          }
-        }
         setToast({ isVisible: true, message: 'Posting closed.', type: 'success' });
       } else if (action === 'renew') {
         const newExpiry = new Date(Date.now() + 65 * 24 * 60 * 60 * 1000);
@@ -142,13 +135,6 @@ export const MyPostings: React.FC = () => {
           expiresAt: Timestamp.fromDate(newExpiry),
           createdAt: Timestamp.now()
         });
-        if (type === 'jobs') {
-          try {
-            await updateDoc(doc(db, 'platformStats', 'counts'), { activeOpportunities: increment(1) });
-          } catch (e) {
-            console.warn("Couldn't update system opportunities count: ", e);
-          }
-        }
         setToast({ isVisible: true, message: 'Posting renewed for 60 days.', type: 'success' });
       }
       fetchAllPostings();

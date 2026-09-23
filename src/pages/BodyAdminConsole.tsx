@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { db, auth } from '../lib/firebase';
+import { db } from '../lib/firebase';
 import { 
   collection, 
   query, 
@@ -37,21 +37,7 @@ import {
   Square
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { IndividualProfile } from '../types';
-
-interface RegulatoryAdmin {
-  uid: string;
-  fullName: string;
-  email: string;
-  body: 'PSU' | 'AHPC' | 'UNMC';
-  bodyFullName: string;
-  scopedCadres: string[];
-  role: string;
-  isActive: boolean;
-  notes?: string;
-  addedAt?: any;
-  lastLoginAt?: any;
-}
+import { IndividualProfile, ProfessionalAuthorityAdmin } from '../types';
 
 interface VerificationDoc {
   userId: string;
@@ -70,14 +56,14 @@ export const BodyAdminConsole: React.FC = () => {
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
   
-  const [adminProfile, setAdminProfile] = useState<RegulatoryAdmin | null>(null);
+  const [adminProfile, setAdminProfile] = useState<ProfessionalAuthorityAdmin | null>(null);
   const [loadingAdmin, setLoadingAdmin] = useState(true);
   const [activeTab, setActiveTab] = useState<'queue' | 'licence' | 'directory' | 'team'>('queue');
 
   // Core Data State
   const [profiles, setProfiles] = useState<any[]>([]);
   const [verificationDocs, setVerificationDocs] = useState<{ [uid: string]: VerificationDoc }>({});
-  const [adminsList, setAdminsList] = useState<RegulatoryAdmin[]>([]);
+  const [adminsList, setAdminsList] = useState<ProfessionalAuthorityAdmin[]>([]);
   const [loadingData, setLoadingData] = useState(false);
 
   // Search & Filter state for Licence & Directory
@@ -109,347 +95,16 @@ export const BodyAdminConsole: React.FC = () => {
   const [bulkTargetStatus, setBulkTargetStatus] = useState<string>('not_renewed');
   const [bulkConfirmChecked, setBulkConfirmChecked] = useState(false);
 
-  // Seeding Lab States (Part 12 Verification Controls)
-  const [seedingStatus, setSeedingStatus] = useState<string | null>(null);
-  const [seedingLoading, setSeedingLoading] = useState(false);
+  const canVerify = !!adminProfile
+    && ['authority_super_admin', 'verification_officer'].includes(adminProfile.role);
+  const canManageCompliance = !!adminProfile
+    && ['authority_super_admin', 'compliance_officer'].includes(adminProfile.role);
 
-  const handleSeedProfessionals = async () => {
-    setSeedingLoading(true);
-    setSeedingStatus("Seeding professionals list to individualProfiles collection...");
-    try {
-      const batch = writeBatch(db);
-      
-      const pros = [
-        {
-          id: "sarah_namukasa_id",
-          fullName: "Sarah Namukasa",
-          phone: "+256 772 123456",
-          district: "Kampala",
-          primaryCadre: "pharmacist",
-          registrationNumber: "PSU/PH-7729",
-          qualification: "Bachelor of Pharmacy (Makerere University)",
-          qualificationYear: 2021,
-          yearsExperience: "2",
-          availabilityStatus: "actively_seeking",
-          preferredEmploymentTypes: ["full_time", "locum"],
-          areasOfPractice: ["Retail Pharmacy", "Hospital Pharmacy"],
-          roles: ["Supervising Pharmacist", "Quality Assurance"],
-          bio: "Dedicated pharmacist with a keen interest in sterile manufacturing and regulatory compliance in Uganda.",
-          profileCompleteness: 90,
-          createdAt: Timestamp.now(),
-          updatedAt: Timestamp.now(),
-          credentialVerificationStatus: "pending_review",
-          practisingLicenceStatus: "not_renewed",
-          practisingLicenceYear: 2025
-        },
-        {
-          id: "john_okello_id",
-          fullName: "John Okello",
-          phone: "+255 788 444333",
-          district: "Gulu",
-          primaryCadre: "pharmacy_technician",
-          registrationNumber: "AHPC/PT-1992",
-          qualification: "Diploma in Pharmacy (Gulu University)",
-          qualificationYear: 2018,
-          yearsExperience: "5",
-          availabilityStatus: "open_to_offers",
-          preferredEmploymentTypes: ["full_time"],
-          areasOfPractice: ["Hospital Pharmacy", "Inventory Management"],
-          roles: ["Dispenser", "Store Manager"],
-          bio: "Experienced pharmacy technician focused on outpatient clinical dispensing and inventory tracking.",
-          profileCompleteness: 100,
-          createdAt: Timestamp.now(),
-          updatedAt: Timestamp.now(),
-          credentialVerificationStatus: "verified",
-          credentialVerifiedByBody: "Allied Health Professionals Council",
-          credentialVerifiedAt: Timestamp.now(),
-          practisingLicenceStatus: "renewed_current",
-          practisingLicenceYear: 2026
-        },
-        {
-          id: "esther_birungi_id",
-          fullName: "Esther Birungi",
-          phone: "+256 712 998811",
-          district: "Mbarara",
-          primaryCadre: "dispenser",
-          registrationNumber: "D-3382",
-          qualification: "Certificate in Dispensing (Mbarara University)",
-          qualificationYear: 2019,
-          yearsExperience: "4",
-          availabilityStatus: "not_available",
-          preferredEmploymentTypes: ["part_time"],
-          areasOfPractice: ["Retail Pharmacy"],
-          roles: ["Dispenser"],
-          bio: "Passionate dispenser seeking opportunities in retail distribution networks.",
-          profileCompleteness: 80,
-          createdAt: Timestamp.now(),
-          updatedAt: Timestamp.now(),
-          credentialVerificationStatus: "rejected",
-          credentialRejectionReason: "Practising certificate scan is blurred and illegible. Please re-upload high resolution document.",
-          practisingLicenceStatus: "not_renewed",
-          practisingLicenceYear: 2025
-        },
-        {
-          id: "david_musisi_id",
-          fullName: "David Musisi",
-          phone: "+256 755 221100",
-          district: "Entebbe",
-          primaryCadre: "pharmacist",
-          registrationNumber: "PSU/PH-8812",
-          qualification: "Bachelor of Pharmacy (Mbarara University)",
-          qualificationYear: 2024,
-          yearsExperience: "1",
-          availabilityStatus: "actively_seeking",
-          preferredEmploymentTypes: ["locum", "contract"],
-          areasOfPractice: ["Clinical Pharmacy"],
-          roles: ["Intern Pharmacist"],
-          bio: "Fresh pharmacy graduate ready to join hospital practice.",
-          profileCompleteness: 70,
-          createdAt: Timestamp.now(),
-          updatedAt: Timestamp.now(),
-          credentialVerificationStatus: "unverified",
-          practisingLicenceStatus: "not_renewed"
-        }
-      ];
-
-      for (const pro of pros) {
-        batch.set(doc(db, 'individualProfiles', pro.id), pro);
-        batch.set(doc(db, 'users', pro.id), {
-          id: pro.id,
-          accountType: 'individual',
-          isActive: true,
-          isVerified: pro.credentialVerificationStatus === 'verified'
-        });
-      }
-
-      // Add a verificationDocument record for Sarah Namukasa so she appears in the review queue
-      batch.set(doc(db, 'verificationDocuments', 'sarah_namukasa_id'), {
-        userId: "sarah_namukasa_id",
-        registrationCertificateUrl: "https://images.unsplash.com/photo-1586075010923-2dd45e9b2d4f?w=600",
-        practisingCertificateUrl: "https://images.unsplash.com/photo-1506784983877-45594efa4cbe?w=600",
-        submittedAt: Timestamp.now(),
-        submittedForYear: 2026
-      });
-
-      await batch.commit();
-      setSeedingStatus("Success! Fully loaded 4 professionals (including Sarah Namukasa) into individualProfiles.");
-      setTimeout(() => window.location.reload(), 1500);
-    } catch (err: any) {
-      setSeedingStatus(`Error seeding professionals: ${err.message}`);
-    } finally {
-      setSeedingLoading(false);
-    }
-  };
-
-  const handleSeedJobs = async () => {
-    setSeedingLoading(true);
-    setSeedingStatus("Seeding live active pharmaceutical jobs...");
-    try {
-      const batch = writeBatch(db);
-      const jobsList = [
-        {
-          id: "job_demo_1",
-          title: "Supervising Pharmacist",
-          cadreRequired: "pharmacist",
-          district: "Kampala",
-          employmentType: "full_time",
-          description: "Responsible for managing standard daily retail compliance, stock reviews, and patient advisory protocols.",
-          contactDetail: "jobs@kampalapharm.com",
-          organisationUserId: "org_kampala_id",
-          organisationName: "Kampala Allied Pharmacy",
-          organisationTypes: ["retail_pharmacy"],
-          organisationDistrict: "Kampala",
-          status: "active",
-          createdAt: Timestamp.now(),
-          expiresAt: Timestamp.fromMillis(Date.now() + 30 * 24 * 3600 * 1000),
-          interestCount: 0
-        },
-        {
-          id: "job_demo_2",
-          title: "Production Chemist (Injectables)",
-          cadreRequired: "production_personnel",
-          district: "Entebbe",
-          employmentType: "full_time",
-          description: "Join our sterile cleanrooms manufacturing lines to guide fluid processing, batch formulation, and clean protocol oversight.",
-          contactDetail: "careers@ugandapharma.co.ug",
-          organisationUserId: "org_entebbe_id",
-          organisationName: "Uganda Pharma Industries",
-          organisationTypes: ["manufacturer"],
-          organisationDistrict: "Entebbe",
-          status: "active",
-          createdAt: Timestamp.now(),
-          expiresAt: Timestamp.fromMillis(Date.now() + 45 * 24 * 3600 * 1000),
-          interestCount: 1
-        },
-        {
-          id: "job_demo_3",
-          title: "Locum Pharmacy Dispenser",
-          cadreRequired: "dispenser",
-          district: "Mbarara",
-          employmentType: "locum",
-          description: "Night shift cover dispenser requested for urgent retail pharmacy operations. Daily pay settlement.",
-          contactDetail: "mbarara_retail@gmail.com",
-          organisationUserId: "org_mbarara_id",
-          organisationName: "Mbarara Community Drug Shop",
-          organisationTypes: ["drug_shop"],
-          organisationDistrict: "Mbarara",
-          status: "active",
-          createdAt: Timestamp.now(),
-          expiresAt: Timestamp.fromMillis(Date.now() + 15 * 24 * 3600 * 1000),
-          interestCount: 0
-        },
-        {
-          id: "job_demo_4",
-          title: "Medical Sales Representative",
-          cadreRequired: "medical_sales_rep",
-          district: "Gulu",
-          employmentType: "contract",
-          description: "Promoting cardiovascular and diabetic care categories to private hospitals and retail pharmacies in Northern region.",
-          contactDetail: "hr@medistributors.ug",
-          organisationUserId: "org_gulu_id",
-          organisationName: "ME Distributors Uganda",
-          organisationTypes: ["distributor"],
-          organisationDistrict: "Gulu",
-          status: "active",
-          createdAt: Timestamp.now(),
-          expiresAt: Timestamp.fromMillis(Date.now() + 60 * 24 * 3600 * 1000),
-          interestCount: 2
-        },
-        {
-          id: "job_demo_5",
-          title: "Responsible Quality Assurance Lead",
-          cadreRequired: "qa_qc_officer",
-          district: "Kampala",
-          employmentType: "full_time",
-          description: "Seeking regulatory pharmacist or quality manager to lead cold-chain validation, audit updates, and importer compliance checking.",
-          contactDetail: "qa@importercorp.com",
-          organisationUserId: "org_im_id",
-          organisationName: "Kampala National Importers Ltd",
-          organisationTypes: ["importer"],
-          organisationDistrict: "Kampala",
-          status: "active",
-          createdAt: Timestamp.now(),
-          expiresAt: Timestamp.fromMillis(Date.now() + 30 * 24 * 3600 * 1000),
-          interestCount: 0
-        }
-      ];
-
-      for (const j of jobsList) {
-        batch.set(doc(db, 'jobPostings', j.id), j);
-      }
-      await batch.commit();
-      setSeedingStatus("Success! 5 active jobPostings are now visible in the Job Board marketplace.");
-      setTimeout(() => window.location.reload(), 1500);
-    } catch (err: any) {
-      setSeedingStatus(`Error seeding jobs: ${err.message}`);
-    } finally {
-      setSeedingLoading(false);
-    }
-  };
-
-  const handleSeedBusinesses = async () => {
-    setSeedingLoading(true);
-    setSeedingStatus("Seeding businesses for sale list...");
-    try {
-      const batch = writeBatch(db);
-      const businesses = [
-        {
-          id: "biz_demo_1",
-          sellerUserId: "org_seller_1",
-          listingTitle: "Valued Retail Pharmacy for Sale on Main Highway",
-          isConfidential: false,
-          businessType: "retail_pharmacy",
-          district: "Jinja",
-          locationDescription: "Jinja-Kampala Highway, busy commercial center near regional terminal.",
-          yearsInOperation: 6,
-          ndaLicenceStatus: "valid",
-          staffCount: 3,
-          businessDescription: "High-volume retail pharmacy running on a strong recurring prescription customer base. Fully licensed by National Drug Authority with complete compliance audits. Excellent margin mix of branded medications.",
-          askingPriceUGX: 135000000,
-          priceNegotiable: true,
-          monthlySalesRange: "UGX 22,000,000 - 30,000,500",
-          reasonForSale: "Seller retiring overseas.",
-          whatsIncluded: ["All retail fittings", "POS records", "Air conditioning equipment"],
-          contactMethod: "email",
-          contactDetail: "jinjasale@pharmnet.ug",
-          contactName: "Mr. David Mukasa",
-          photoUrls: ["https://images.unsplash.com/photo-1576091160550-2173dba999ef?w=600"],
-          status: "active",
-          createdAt: Timestamp.now(),
-          expiresAt: Timestamp.fromMillis(Date.now() + 65 * 24 * 3600 * 1000),
-          viewCount: 14
-        },
-        {
-          id: "biz_demo_2",
-          sellerUserId: "org_seller_2",
-          listingTitle: "Commercial Drug Shop Unit near Gulu Center",
-          isConfidential: false,
-          businessType: "drug_shop",
-          district: "Gulu",
-          locationDescription: "Gulu Market Center Road, premium corner shop with heavy footfall.",
-          yearsInOperation: 4,
-          ndaLicenceStatus: "valid",
-          staffCount: 2,
-          businessDescription: "Well positioned drug shop yielding consistent cash sales revenues. Low lease rentals.",
-          askingPriceUGX: 45000000,
-          priceNegotiable: false,
-          monthlySalesRange: "UGX 8,000,000 - 12,000,000",
-          reasonForSale: "Capital fundraising for wholesale expansion.",
-          whatsIncluded: ["Shelving counters", "Initial inventory of UGX 15M value"],
-          contactMethod: "phone",
-          contactDetail: "+256 701 445566",
-          contactName: "Acia Proscovia",
-          photoUrls: ["https://images.unsplash.com/photo-1585435557343-3b092031a831?w=600"],
-          status: "active",
-          createdAt: Timestamp.now(),
-          expiresAt: Timestamp.fromMillis(Date.now() + 80 * 24 * 3600 * 1000),
-          viewCount: 8
-        },
-        {
-          id: "biz_demo_3",
-          sellerUserId: "org_seller_3",
-          listingTitle: "Regional Wholesaler / Distributor Depot",
-          isConfidential: true,
-          businessType: "wholesale_pharmacy",
-          district: "Masaka",
-          locationDescription: "Masaka industrial distribution corridor logistics hub.",
-          yearsInOperation: 8,
-          ndaLicenceStatus: "valid",
-          staffCount: 7,
-          businessDescription: "Wholesale distribution license, temperature-mapped secure warehouse, and active supply chain contracts.",
-          askingPriceUGX: 450000000,
-          priceNegotiable: true,
-          monthlySalesRange: "UGX 110,000,000 - 150,000,000",
-          reasonForSale: "Owner focusing on drug formulation.",
-          whatsIncluded: ["Secure warehouse setup", "NDA wholesale permits", "Active supply agreements"],
-          contactMethod: "email",
-          contactDetail: "confidential_masaka@pharmnet.ug",
-          contactName: "Investment Advisor",
-          photoUrls: ["https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?w=600"],
-          status: "active",
-          createdAt: Timestamp.now(),
-          expiresAt: Timestamp.fromMillis(Date.now() + 90 * 24 * 3600 * 1000),
-          viewCount: 23
-        }
-      ];
-
-      for (const b of businesses) {
-        batch.set(doc(db, 'businessListings', b.id), b);
-      }
-      await batch.commit();
-      setSeedingStatus("Success! 3 Ugandan Pharmacy Businesses For Sale loaded into businessListings.");
-      setTimeout(() => window.location.reload(), 1500);
-    } catch (err: any) {
-      setSeedingStatus(`Error seeding businesses: ${err.message}`);
-    } finally {
-      setSeedingLoading(false);
-    }
-  };
-
-  // Verify and fetch administrative data
+  // Verify and fetch professional-authority administrative data.
+  // Authority accounts must be provisioned through trusted backend processes.
   useEffect(() => {
     let isMounted = true;
-    
+
     if (!user) {
       setLoadingAdmin(false);
       return;
@@ -457,113 +112,36 @@ export const BodyAdminConsole: React.FC = () => {
 
     const checkAdminAffiliation = async () => {
       try {
-        // Evaluate by direct search or claim fallback for secure local dev
-        const adminDocRef = doc(db, 'regulatoryBodyAdmins', user.uid);
+        const adminDocRef = doc(db, 'professionalAuthorityAdmins', user.uid);
         const adminDocSnap = await getDoc(adminDocRef);
 
-        if (adminDocSnap.exists()) {
-          const data = adminDocSnap.data() as RegulatoryAdmin;
-          if (data.isActive === false) {
-            signOut();
-            alert("Your regulatory admin account has been deactivated. Contact the platform administrator.");
-            navigate('/login');
-            return;
-          }
-          if (isMounted) {
-            setAdminProfile(data);
-          }
-        } else {
-          // If the spec account exists as PSU admin or AHPC admin by email, let's auto-provision or match them client side!
-          letMatchedStaffCollection(isMounted);
-        }
-      } catch (err) {
-        console.error("Checking admin doc affiliation has failed:", err);
-        if (isMounted) {
-          setLoadingAdmin(false);
-        }
-      }
-    };
-
-    const letMatchedStaffCollection = async (isMounted: boolean) => {
-      const email = user.email || '';
-      let mockAdmin: RegulatoryAdmin | null = null;
-
-      if (email === 'psu.admin@demo.pnu.ug') {
-        mockAdmin = {
-          uid: user.uid,
-          fullName: "Dr. Amina Ssekandi",
-          email: "psu.admin@demo.pnu.ug",
-          body: "PSU",
-          bodyFullName: "Pharmaceutical Society of Uganda",
-          scopedCadres: ["pharmacist"],
-          role: "body_admin",
-          isActive: true,
-          notes: "Demo PSU Admin staff account."
-        };
-      } else if (email === 'ahpc.admin@demo.pnu.ug') {
-        mockAdmin = {
-          uid: user.uid,
-          fullName: "Mr. Robert Opio",
-          email: "ahpc.admin@demo.pnu.ug",
-          body: "AHPC",
-          bodyFullName: "Allied Health Professionals Council",
-          scopedCadres: [
-            "pharmacy_technician", 
-            "pharmacy_assistant", 
-            "dispenser", 
-            "drug_shop_auxiliary", 
-            "qa_qc_officer", 
-            "procurement_officer", 
-            "stores_officer", 
-            "stores_manager"
-          ],
-          role: "body_admin",
-          isActive: true,
-          notes: "Demo AHPC Admin staff account."
-        };
-      }
-
-      if (mockAdmin) {
-        try {
-          // Write to Firestore to persist it
-          await updateDoc(doc(db, 'regulatoryBodyAdmins', user.uid), mockAdmin as any).catch(async () => {
-            // If document does not exist, use setDoc/create write
-            const { setDoc } = await import('firebase/firestore');
-            await setDoc(doc(db, 'regulatoryBodyAdmins', user.uid), mockAdmin);
-          });
-          if (isMounted) {
-            setAdminProfile(mockAdmin);
-          }
-        } catch (writeErr) {
-          console.warn("Could not write regulatory admin doc automatically, using client state.", writeErr);
-          if (isMounted) {
-            setAdminProfile(mockAdmin);
-          }
-        }
-      } else {
-        // Redirection route guard if the user lacks regulatory privileges
-        // Double check if standard platform admin
-        const idToken = await auth.currentUser?.getIdTokenResult();
-        if (idToken?.claims.admin || user.email === 'admin.peter@pharmagh.com') {
-          navigate('/admin');
+        if (!adminDocSnap.exists()) {
+          navigate('/dashboard');
           return;
         }
-        
-        navigate('/dashboard');
-      }
-      if (isMounted) {
-        setLoadingAdmin(false);
+
+        const data = adminDocSnap.data() as ProfessionalAuthorityAdmin;
+        if (data.isActive === false) {
+          await signOut();
+          navigate('/login');
+          return;
+        }
+
+        if (isMounted) setAdminProfile(data);
+      } catch (err) {
+        console.error('Checking professional authority affiliation failed:', err);
+        if (isMounted) setAdminProfile(null);
+      } finally {
+        if (isMounted) setLoadingAdmin(false);
       }
     };
 
-    checkAdminAffiliation().then(() => {
-      if (isMounted) setLoadingAdmin(false);
-    });
+    checkAdminAffiliation();
 
     return () => {
       isMounted = false;
     };
-  }, [user, navigate]);
+  }, [user, navigate, signOut]);
 
   // Load appropriate data whenever active tab or admin profile changes
   useEffect(() => {
@@ -574,187 +152,274 @@ export const BodyAdminConsole: React.FC = () => {
   const loadConsoleData = async () => {
     if (!adminProfile) return;
     setLoadingData(true);
+
     try {
-      // 1. Load profiles in cadres
-      const q = query(
-        collection(db, 'individualProfiles')
+      if (adminProfile.scopedCadres.length === 0) {
+        setProfiles([]);
+        setVerificationDocs({});
+        setAdminsList([]);
+        return;
+      }
+
+      // 1. Load only profiles that fall inside this authority administrator's cadre scope.
+      const scopedCadres = adminProfile.scopedCadres.slice(0, 30);
+      const profilesQuery = query(
+        collection(db, 'individualProfiles'),
+        where('primaryCadre', 'in', scopedCadres)
       );
-      const querySnap = await getDocs(q);
-      const allProfiles: any[] = [];
-      querySnap.forEach(profileDoc => {
-        const pData = profileDoc.data();
-        if (adminProfile.scopedCadres.includes(pData.primaryCadre)) {
-          allProfiles.push({ id: profileDoc.id, ...pData });
-        }
-      });
+      const querySnap = await getDocs(profilesQuery);
+      const allProfiles = querySnap.docs.map(profileDoc => ({
+        id: profileDoc.id,
+        ...profileDoc.data()
+      }));
       setProfiles(allProfiles);
 
-      // 2. Load associated verification documents
-      const docsSnap = await getDocs(collection(db, 'verificationDocuments'));
+      // 2. Load only verification documents belonging to the already scoped profiles.
+      const verificationEntries = await Promise.all(
+        allProfiles.map(async profile => {
+          const verificationSnap = await getDoc(doc(db, 'verificationDocuments', profile.id));
+          return verificationSnap.exists()
+            ? [profile.id, verificationSnap.data() as VerificationDoc] as const
+            : null;
+        })
+      );
       const activeDocs: { [uid: string]: VerificationDoc } = {};
-      docsSnap.forEach(vd => {
-        activeDocs[vd.id] = vd.data() as VerificationDoc;
+      verificationEntries.forEach(entry => {
+        if (entry) activeDocs[entry[0]] = entry[1];
       });
       setVerificationDocs(activeDocs);
 
-      // 3. Load administrative colleagues
-      const adminsSnap = await getDocs(collection(db, 'regulatoryBodyAdmins'));
-      const list: RegulatoryAdmin[] = [];
-      adminsSnap.forEach(ad => {
-        const adData = ad.data() as RegulatoryAdmin;
-        if (adData.body === adminProfile.body) {
-          list.push(adData);
-        }
-      });
+      // 3. Load colleagues only from the same professional authority.
+      const adminsQuery = query(
+        collection(db, 'professionalAuthorityAdmins'),
+        where('authorityId', '==', adminProfile.authorityId)
+      );
+      const adminsSnap = await getDocs(adminsQuery);
+      const list = adminsSnap.docs.map(ad => ad.data() as ProfessionalAuthorityAdmin);
       setAdminsList(list);
     } catch (err) {
-      console.error("Failed to load Regulatory Board data:", err);
+      console.error('Failed to load professional authority data:', err);
     } finally {
       setLoadingData(false);
     }
   };
 
-  // Quick Action Handler - Verification approvals
+  // Verification actions are restricted to authority super admins and verification officers.
   const handleApprove = async (profileId: string) => {
-    if (!adminProfile) return;
+    if (!adminProfile || !canVerify) return;
+
     setSavingAction(true);
     try {
+      const batch = writeBatch(db);
       const pRef = doc(db, 'individualProfiles', profileId);
-      await updateDoc(pRef, {
+      const userRef = doc(db, 'users', profileId);
+      const vdRef = doc(db, 'verificationDocuments', profileId);
+
+      batch.update(pRef, {
         credentialVerificationStatus: 'verified',
         credentialVerifiedAt: serverTimestamp(),
-        credentialVerifiedByBody: adminProfile.bodyFullName,
+        credentialVerifiedByBody: adminProfile.authorityName,
         credentialVerifiedByUid: adminProfile.uid,
         credentialRejectionReason: '',
-        practisingLicenceStatus: 'not_renewed', // Start-state is registered, needs licence updated next.
+        isDirectoryVisible: false,
         updatedAt: serverTimestamp()
       });
 
-      // Update local verification doc reviewed tags
-      const vdRef = doc(db, 'verificationDocuments', profileId);
-      await updateDoc(vdRef, {
+      batch.update(userRef, {
+        accountStatus: 'INACTIVE_ANNUAL_COMPLIANCE',
+        isActive: false,
+        isVerified: true,
+        updatedAt: serverTimestamp()
+      });
+
+      batch.update(vdRef, {
         reviewedAt: serverTimestamp(),
         reviewedByUid: adminProfile.uid,
-        reviewedByBody: adminProfile.body,
-        reviewNotes: 'Approved during queue validation.'
-      }).catch(e => console.warn("Verification documents update failed:", e));
+        reviewedByBody: adminProfile.authorityId,
+        reviewNotes: 'Professional credentials approved. Annual compliance confirmation is still required.',
+        submissionStatus: 'approved'
+      });
 
-      // Refresh data
+      await batch.commit();
       await loadConsoleData();
       setActiveReviewProfile(null);
     } catch (err) {
-      alert("Error approving credential: " + err);
+      alert('Error approving professional credentials: ' + err);
     } finally {
       setSavingAction(false);
     }
   };
 
   const handleReject = async (profileId: string) => {
-    if (!adminProfile || !rejectionReason.trim()) {
-      alert("Please provide an internal or external reason for rejection.");
-      return;
-    }
-    setSavingAction(true);
-    try {
-      const pRef = doc(db, 'individualProfiles', profileId);
-      await updateDoc(pRef, {
-        credentialVerificationStatus: 'rejected',
-        credentialRejectionReason: rejectionReason,
-        updatedAt: serverTimestamp()
-      });
-
-      const vdRef = doc(db, 'verificationDocuments', profileId);
-      await updateDoc(vdRef, {
-        reviewedAt: serverTimestamp(),
-        reviewedByUid: adminProfile.uid,
-        reviewedByBody: adminProfile.body,
-        reviewNotes: `Rejected: ${rejectionReason}`
-      }).catch(e => console.warn("Verification documents update failed:", e));
-
-      await loadConsoleData();
-      setShowRejectForm(false);
-      setRejectionReason('');
-      setActiveReviewProfile(null);
-    } catch (err) {
-      alert("Error rejecting credential: " + err);
-    } finally {
-      setSavingAction(false);
-    }
-  };
-
-  const handleRequestMoreInfo = async (profileId: string) => {
-    if (!adminProfile || !requestInfoNotes.trim()) {
-      alert("Please specify what information or file corrections are required.");
-      return;
-    }
-    setSavingAction(true);
-    try {
-      const pRef = doc(db, 'individualProfiles', profileId);
-      await updateDoc(pRef, {
-        credentialVerificationStatus: 'unverified',
-        credentialRejectionReason: `More info required: ${requestInfoNotes}`,
-        updatedAt: serverTimestamp()
-      });
-
-      const vdRef = doc(db, 'verificationDocuments', profileId);
-      await updateDoc(vdRef, {
-        reviewedAt: serverTimestamp(),
-        reviewedByUid: adminProfile.uid,
-        reviewedByBody: adminProfile.body,
-        reviewNotes: `More Info Requested: ${requestInfoNotes}`
-      }).catch(e => console.warn("Verification documents update failed:", e));
-
-      await loadConsoleData();
-      setShowRequestInfoForm(false);
-      setRequestInfoNotes('');
-      setActiveReviewProfile(null);
-    } catch (err) {
-      alert("Error requesting more information: " + err);
-    } finally {
-      setSavingAction(false);
-    }
-  };
-
-  // Individual Licence Status Save
-  const handleSaveIndividualLicence = async () => {
-    if (!activeUpdateLicenceProfile) return;
-    setSavingAction(true);
-    try {
-      const pRef = doc(db, 'individualProfiles', activeUpdateLicenceProfile.id);
-      await updateDoc(pRef, {
-        practisingLicenceStatus: editLicenceStatus,
-        practisingLicenceYear: Number(editLicenceYear),
-        licenceRenewalDate: Timestamp.fromDate(new Date(editRenewalDate)),
-        licenceExpiryDate: Timestamp.fromDate(new Date(editExpiryDate)),
-        licenceSuspensionReason: editLicenceStatus === 'suspended' ? editSuspensionReason : '',
-        updatedAt: serverTimestamp()
-      });
-
-      await loadConsoleData();
-      setActiveUpdateLicenceProfile(null);
-    } catch (err) {
-      alert("Error updating licence status: " + err);
-    } finally {
-      setSavingAction(false);
-    }
-  };
-
-  // Bulk update action
-  const handleBulkUpdate = async () => {
-    if (selectedProfileIds.length === 0 || !bulkConfirmChecked) {
-      alert("Please select profiles and check the confirmation box.");
+    if (!adminProfile || !canVerify || !rejectionReason.trim()) {
+      alert('Please provide a reason for rejection.');
       return;
     }
 
     setSavingAction(true);
     try {
       const batch = writeBatch(db);
-      
+      const pRef = doc(db, 'individualProfiles', profileId);
+      const userRef = doc(db, 'users', profileId);
+      const vdRef = doc(db, 'verificationDocuments', profileId);
+
+      batch.update(pRef, {
+        credentialVerificationStatus: 'rejected',
+        credentialRejectionReason: rejectionReason,
+        isDirectoryVisible: false,
+        updatedAt: serverTimestamp()
+      });
+
+      batch.update(userRef, {
+        accountStatus: 'REJECTED',
+        isActive: false,
+        isVerified: false,
+        updatedAt: serverTimestamp()
+      });
+
+      batch.update(vdRef, {
+        reviewedAt: serverTimestamp(),
+        reviewedByUid: adminProfile.uid,
+        reviewedByBody: adminProfile.authorityId,
+        reviewNotes: `Rejected: ${rejectionReason}`,
+        submissionStatus: 'rejected'
+      });
+
+      await batch.commit();
+      await loadConsoleData();
+      setShowRejectForm(false);
+      setRejectionReason('');
+      setActiveReviewProfile(null);
+    } catch (err) {
+      alert('Error rejecting professional credentials: ' + err);
+    } finally {
+      setSavingAction(false);
+    }
+  };
+
+  const handleRequestMoreInfo = async (profileId: string) => {
+    if (!adminProfile || !canVerify || !requestInfoNotes.trim()) {
+      alert('Please specify what information or corrections are required.');
+      return;
+    }
+
+    setSavingAction(true);
+    try {
+      const batch = writeBatch(db);
+      const pRef = doc(db, 'individualProfiles', profileId);
+      const userRef = doc(db, 'users', profileId);
+      const vdRef = doc(db, 'verificationDocuments', profileId);
+
+      batch.update(pRef, {
+        credentialVerificationStatus: 'unverified',
+        credentialRejectionReason: `More information required: ${requestInfoNotes}`,
+        isDirectoryVisible: false,
+        updatedAt: serverTimestamp()
+      });
+
+      batch.update(userRef, {
+        accountStatus: 'MORE_INFORMATION_REQUIRED',
+        isActive: false,
+        isVerified: false,
+        updatedAt: serverTimestamp()
+      });
+
+      batch.update(vdRef, {
+        reviewedAt: serverTimestamp(),
+        reviewedByUid: adminProfile.uid,
+        reviewedByBody: adminProfile.authorityId,
+        reviewNotes: `More information required: ${requestInfoNotes}`,
+        submissionStatus: 'more_information_required'
+      });
+
+      await batch.commit();
+      await loadConsoleData();
+      setShowRequestInfoForm(false);
+      setRequestInfoNotes('');
+      setActiveReviewProfile(null);
+    } catch (err) {
+      alert('Error requesting more information: ' + err);
+    } finally {
+      setSavingAction(false);
+    }
+  };
+
+  const accountStateForLicence = (status: string) => {
+    if (status === 'renewed_current') {
+      return { accountStatus: 'ACTIVE', isActive: true };
+    }
+    if (status === 'suspended') {
+      return { accountStatus: 'SUSPENDED_BY_AUTHORITY', isActive: false };
+    }
+    return { accountStatus: 'INACTIVE_ANNUAL_COMPLIANCE', isActive: false };
+  };
+
+  // Annual compliance actions are restricted to authority super admins and compliance officers.
+  const handleSaveIndividualLicence = async () => {
+    if (!activeUpdateLicenceProfile || !canManageCompliance) return;
+
+    setSavingAction(true);
+    try {
+      const nextAccountState = accountStateForLicence(editLicenceStatus);
+      const batch = writeBatch(db);
+      const pRef = doc(db, 'individualProfiles', activeUpdateLicenceProfile.id);
+      const userRef = doc(db, 'users', activeUpdateLicenceProfile.id);
+
+      batch.update(pRef, {
+        practisingLicenceStatus: editLicenceStatus,
+        practisingLicenceYear: Number(editLicenceYear),
+        licenceRenewalDate: Timestamp.fromDate(new Date(editRenewalDate)),
+        licenceExpiryDate: Timestamp.fromDate(new Date(editExpiryDate)),
+        licenceSuspensionReason: editLicenceStatus === 'suspended' ? editSuspensionReason : '',
+        isDirectoryVisible: nextAccountState.isActive
+          && Number(activeUpdateLicenceProfile.profileCompleteness || 0) >= 60,
+        updatedAt: serverTimestamp()
+      });
+
+      batch.update(userRef, {
+        accountStatus: nextAccountState.accountStatus,
+        isActive: nextAccountState.isActive,
+        isVerified: true,
+        updatedAt: serverTimestamp()
+      });
+
+      await batch.commit();
+      await loadConsoleData();
+      setActiveUpdateLicenceProfile(null);
+    } catch (err) {
+      alert('Error updating annual professional compliance: ' + err);
+    } finally {
+      setSavingAction(false);
+    }
+  };
+
+  const handleBulkUpdate = async () => {
+    if (!canManageCompliance) return;
+
+    if (selectedProfileIds.length === 0 || !bulkConfirmChecked) {
+      alert('Please select professionals and confirm the bulk update.');
+      return;
+    }
+
+    setSavingAction(true);
+    try {
+      const nextAccountState = accountStateForLicence(bulkTargetStatus);
+      const batch = writeBatch(db);
+
       selectedProfileIds.forEach(id => {
-        const pRef = doc(db, 'individualProfiles', id);
-        batch.update(pRef, {
+        const selectedProfile = profiles.find(profile => profile.id === id);
+        batch.update(doc(db, 'individualProfiles', id), {
           practisingLicenceStatus: bulkTargetStatus,
           practisingLicenceYear: new Date().getFullYear(),
+          isDirectoryVisible: nextAccountState.isActive
+            && Number(selectedProfile?.profileCompleteness || 0) >= 60,
+          updatedAt: serverTimestamp()
+        });
+
+        batch.update(doc(db, 'users', id), {
+          accountStatus: nextAccountState.accountStatus,
+          isActive: nextAccountState.isActive,
+          isVerified: true,
           updatedAt: serverTimestamp()
         });
       });
@@ -764,9 +429,9 @@ export const BodyAdminConsole: React.FC = () => {
       setSelectedProfileIds([]);
       setBulkConfirmChecked(false);
       setShowBulkModal(false);
-      alert(`Licence Status successfully updated to "${bulkTargetStatus.replace('_', ' ')}" for ${selectedProfileIds.length} professionals.`);
+      alert(`Annual compliance status updated for ${selectedProfileIds.length} professionals.`);
     } catch (err) {
-      alert("Bulk update operation failed: " + err);
+      alert('Bulk annual-compliance update failed: ' + err);
     } finally {
       setSavingAction(false);
     }
@@ -837,14 +502,14 @@ export const BodyAdminConsole: React.FC = () => {
             <div>
               <div className="flex items-center gap-2">
                 <span className="text-[10px] font-black uppercase tracking-widest bg-emerald-600 text-white px-2.5 py-0.5 rounded-md">
-                  Official Portal
+                  Authority Portal
                 </span>
                 <span className="text-xs text-indigo-200 uppercase font-bold tracking-wider font-mono">
-                  {adminProfile.body} Scoped Console
+                  {adminProfile.authorityId} Scoped Console
                 </span>
               </div>
               <h1 className="text-xl md:text-2xl font-black tracking-tight mt-1">
-                {adminProfile.bodyFullName}
+                {adminProfile.authorityName}
               </h1>
             </div>
           </div>
@@ -921,7 +586,7 @@ export const BodyAdminConsole: React.FC = () => {
             >
               <div className="flex items-center gap-3">
                 <Sliders size={18} />
-                <span>Licence Management</span>
+                <span>Annual Compliance</span>
               </div>
             </button>
 
@@ -978,7 +643,7 @@ export const BodyAdminConsole: React.FC = () => {
                     <div className="flex items-center justify-between">
                       <div>
                         <h2 className="text-xl font-bold text-zinc-900">Verification Backlog</h2>
-                        <p className="text-xs text-zinc-500 mt-1">Pending registration checks and certificate reviews awaiting official {adminProfile.body} seal of approval.</p>
+                        <p className="text-xs text-zinc-500 mt-1">Pending registration checks and certificate reviews awaiting official {adminProfile.authorityId} seal of approval.</p>
                       </div>
                       <span className="text-xs font-black uppercase bg-[#1A237E]/10 text-[#1A237E] p-2 px-3 rounded-lg font-mono">
                         {currentQueue.length} Pending
@@ -1010,7 +675,7 @@ export const BodyAdminConsole: React.FC = () => {
 
                               <div className="space-y-2 mt-4 bg-zinc-50 p-3 rounded-xl border border-zinc-100 text-xs">
                                 <div className="flex justify-between">
-                                  <span className="text-zinc-500 font-medium">Decl. License:</span>
+                                  <span className="text-zinc-500 font-medium">Decl. Compliance:</span>
                                   <span className="font-mono font-bold text-zinc-700">{p.registrationNumber || 'Not provided'}</span>
                                 </div>
                                 <div className="flex justify-between">
@@ -1266,7 +931,7 @@ export const BodyAdminConsole: React.FC = () => {
                               <th className="py-4 px-5">Supervised Cadre</th>
                               <th className="py-4 px-5">District</th>
                               <th className="py-4 px-5">Verification</th>
-                              <th className="py-4 px-5">License Stamp</th>
+                              <th className="py-4 px-5">Compliance Stamp</th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-zinc-100 font-semibold text-zinc-700">
@@ -1324,7 +989,7 @@ export const BodyAdminConsole: React.FC = () => {
                 {activeTab === 'team' && (
                   <div className="space-y-6">
                     <div>
-                      <h2 className="text-xl font-bold text-zinc-900">{adminProfile.bodyFullName} Staff Roster</h2>
+                      <h2 className="text-xl font-bold text-zinc-900">{adminProfile.authorityName} Staff Roster</h2>
                       <p className="text-xs text-zinc-500 mt-1">Colleagues and officers with designated clearance inside your administrative division.</p>
                     </div>
 
@@ -1372,53 +1037,6 @@ export const BodyAdminConsole: React.FC = () => {
                       </div>
                     </div>
 
-                    {/* DEMO DATA ACCELERATOR (Part 12 Validation Panel) */}
-                    <div className="bg-gradient-to-br from-indigo-950 to-slate-900 border border-indigo-900/45 text-white rounded-3xl p-6 shadow-xl space-y-5">
-                      <div className="flex items-center gap-3">
-                        <Sliders size={24} className="text-indigo-400" />
-                        <div>
-                          <h3 className="font-extrabold text-base tracking-tight">Demo Data Installs & Reset Lab</h3>
-                          <p className="text-zinc-400 text-xs">Instantly populate, configure, or reset sandbox testing database collections as requested in Part 12.</p>
-                        </div>
-                      </div>
-
-                      {seedingStatus && (
-                        <p className={`text-xs font-mono font-bold uppercase p-2 px-3 rounded-lg ${
-                          seedingStatus.includes('Success') ? 'bg-emerald-950/80 text-emerald-300 border border-emerald-800' : 'bg-indigo-950 text-indigo-300 border border-indigo-800'
-                        }`}>
-                          {seedingStatus}
-                        </p>
-                      )}
-
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-2">
-                        <button
-                          onClick={handleSeedProfessionals}
-                          disabled={seedingLoading}
-                          className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-extrabold text-[10px] uppercase tracking-wider py-3.5 px-4 rounded-xl transition-all cursor-pointer shadow-sm flex flex-col items-center justify-center text-center gap-1.5"
-                        >
-                          <span>🌱 Seed Ugandan Professionals</span>
-                          <span className="text-[8px] font-medium text-indigo-205 uppercase tracking-widest block font-mono">Sarah Namukasa & 3 others</span>
-                        </button>
-
-                        <button
-                          onClick={handleSeedJobs}
-                          disabled={seedingLoading}
-                          className="bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-extrabold text-[10px] uppercase tracking-wider py-3.5 px-4 rounded-xl transition-all cursor-pointer shadow-sm flex flex-col items-center justify-center text-center gap-1.5"
-                        >
-                          <span>💼 Seed Live jobPostings</span>
-                          <span className="text-[8px] font-medium text-emerald-255 uppercase tracking-widest block font-mono">5 Active postings</span>
-                        </button>
-
-                        <button
-                          onClick={handleSeedBusinesses}
-                          disabled={seedingLoading}
-                          className="bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white font-extrabold text-[10px] uppercase tracking-wider py-3.5 px-4 rounded-xl transition-all cursor-pointer shadow-sm flex flex-col items-center justify-center text-center gap-1.5"
-                        >
-                          <span>🏪 Seed Businesses For Sale</span>
-                          <span className="text-[8px] font-medium text-amber-255 uppercase tracking-widest block font-mono">3 Listings in Uganda</span>
-                        </button>
-                      </div>
-                    </div>
                   </div>
                 )}
 
@@ -1693,7 +1311,7 @@ export const BodyAdminConsole: React.FC = () => {
                   <div className="flex flex-wrap items-center justify-between gap-4">
                     <button
                       onClick={() => handleApprove(activeReviewProfile.id)}
-                      disabled={savingAction}
+                      disabled={savingAction || !canVerify}
                       className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold py-3 px-6 rounded-2xl flex items-center gap-2 shadow-sm cursor-pointer"
                     >
                       <CheckCircle size={16} />
@@ -1702,6 +1320,7 @@ export const BodyAdminConsole: React.FC = () => {
 
                     <div className="flex gap-3">
                       <button
+                        disabled={!canVerify}
                         onClick={() => {
                           setShowRequestInfoForm(true);
                           setShowRejectForm(false);
@@ -1711,6 +1330,7 @@ export const BodyAdminConsole: React.FC = () => {
                         Request More Info
                       </button>
                       <button
+                        disabled={!canVerify}
                         onClick={() => {
                           setShowRejectForm(true);
                           setShowRequestInfoForm(false);
@@ -1745,7 +1365,7 @@ export const BodyAdminConsole: React.FC = () => {
               className="bg-white rounded-3xl overflow-hidden max-w-md w-full shadow-2xl border border-zinc-200"
             >
               <div className="bg-[#1A237E] text-white p-4 px-6 flex justify-between items-center">
-                <h3 className="font-extrabold text-sm">Update Practice Permit Licence</h3>
+                <h3 className="font-extrabold text-sm">Update Annual Compliance</h3>
                 <button 
                   onClick={() => setActiveUpdateLicenceProfile(null)}
                   className="text-white bg-white/10 p-1 px-2.5 rounded-lg text-xs cursor-pointer"
@@ -1764,7 +1384,7 @@ export const BodyAdminConsole: React.FC = () => {
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-zinc-700">Licence Permit Status</label>
+                  <label className="text-xs font-bold text-zinc-700">Professional Standing Status</label>
                   <select
                     value={editLicenceStatus}
                     onChange={(e: any) => setEditLicenceStatus(e.target.value)}
@@ -1836,11 +1456,11 @@ export const BodyAdminConsole: React.FC = () => {
                   Cancel
                 </button>
                 <button
-                  disabled={savingAction || (editLicenceStatus === 'suspended' && !editSuspensionReason.trim())}
+                  disabled={!canManageCompliance || savingAction || (editLicenceStatus === 'suspended' && !editSuspensionReason.trim())}
                   onClick={handleSaveIndividualLicence}
                   className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black uppercase tracking-wider py-2 px-5 rounded-xl transition-all shadow-sm cursor-pointer"
                 >
-                  Save Licence Status
+                  Save Compliance Status
                 </button>
               </div>
             </motion.div>
@@ -1864,7 +1484,7 @@ export const BodyAdminConsole: React.FC = () => {
               className="bg-white rounded-3xl overflow-hidden max-w-md w-full shadow-2xl border border-zinc-200"
             >
               <div className="bg-[#1A237E] text-white p-4 px-6 flex justify-between items-center">
-                <h3 className="font-extrabold text-sm">Bulk Update Licenses</h3>
+                <h3 className="font-extrabold text-sm">Bulk Update Compliance</h3>
                 <button 
                   onClick={() => setShowBulkModal(false)}
                   className="text-white bg-white/10 p-1 px-2.5 rounded-lg text-xs"
@@ -1882,7 +1502,7 @@ export const BodyAdminConsole: React.FC = () => {
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-zinc-700">Target Licence Status To Apply</label>
+                  <label className="text-xs font-bold text-zinc-700">Target Compliance Status</label>
                   <select
                     value={bulkTargetStatus}
                     onChange={(e) => setBulkTargetStatus(e.target.value)}
@@ -1903,7 +1523,7 @@ export const BodyAdminConsole: React.FC = () => {
                     className="mt-0.5 h-4 w-4 bg-zinc-50 border border-zinc-300 rounded focus:ring-primary"
                   />
                   <label htmlFor="bulkConfirm" className="text-xs font-bold text-zinc-700 leading-tight">
-                    I confirm I want to update licence status for {selectedProfileIds.length} professionals.
+                    I confirm I want to update compliance status for {selectedProfileIds.length} professionals.
                   </label>
                 </div>
               </div>
@@ -1916,7 +1536,7 @@ export const BodyAdminConsole: React.FC = () => {
                   Cancel
                 </button>
                 <button
-                  disabled={savingAction || !bulkConfirmChecked}
+                  disabled={!canManageCompliance || savingAction || !bulkConfirmChecked}
                   onClick={handleBulkUpdate}
                   className={`text-xs font-black uppercase tracking-wider py-2 px-5 rounded-xl transition-all shadow-sm cursor-pointer ${
                     bulkConfirmChecked 

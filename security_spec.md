@@ -1,71 +1,91 @@
 # Security Spec: PharmaNetwork Uganda
 
-## Data Invariants
-1. A user can only have one `user_accounts` document, keyed by their UID.
-2. An `individual_profile` or `organisation_profile` must refer to a valid `user_accounts` document.
-3. Users can only edit THEIR OWN profile and account data.
-4. `platform_stats` are read-only for all users, updated by system (admin).
-5. Identity fields (`user_id`, `id` in account) are immutable after creation.
-6. `is_verified` or `is_active` in `user_accounts` cannot be changed by the user (only admin).
+## Purpose
 
-## Detailed Payloads & Negative Tests
+This document records the security contract for the current stabilization branch. It describes protections that are implemented now and the controls that still require automated Firebase Emulator tests.
 
-### T1: Identity Spoofing (Account)
-- **Actor**: User A
-- **Payload**: `{ "id": "UserB", "account_type": "individual" }` to `/user_accounts/UserA`
-- **Result**: `PERMISSION_DENIED` (id must match auth.uid)
+## Privileged access
 
-### T2: Privilege Escalation (Verification)
-- **Actor**: User A
-- **Payload**: `{ "is_verified": true }` to `/user_accounts/UserA`
-- **Result**: `PERMISSION_DENIED` (verified field is immutable for users)
+Platform-admin and professional-authority privileges are backend-controlled.
 
-### T3: Orphaned Profile
-- **Actor**: User A
-- **Payload**: `{ "user_id": "UserB", "full_name": "Ghost" }` to `/individual_profiles/RandomId`
-- **Result**: `PERMISSION_DENIED` (user_id must match auth.uid)
+- Platform admin access is authorized only by the Firebase custom claim `admin: true`.
+- Professional-authority access is authorized only by the Firebase custom claim `authority_admin: true` plus an active `professionalAuthorityAdmins/{uid}` record.
+- Frontend code must not create privileged Firebase Auth users, assign custom claims, or elevate a normal account.
+- Hard-coded privileged email addresses and demo privileged accounts are prohibited.
+- Firestore documents such as `admins` or `professionalAuthorityAdmins` are metadata and scope records; possession of a document alone must not grant platform-admin privilege.
 
-### T4: Junk ID Injection
-- **Actor**: Malicious User
-- **Action**: Create document with ID 2KB long.
-- **Result**: `PERMISSION_DENIED` (isValidId regex check)
+## Member data invariants
 
-### T5: State Lock Bypass (Stats)
-- **Actor**: Authenticated User
-- **Payload**: `{ "stat_value": 99999 }` to `/platform_stats/registered_pharmacists`
-- **Result**: `PERMISSION_DENIED` (Only admin can write)
+1. A normal user may create only their own `users/{uid}` document.
+2. A normal user cannot change their own `id`, `accountType`, `isActive`, or `isVerified` after account creation.
+3. A professional may edit ordinary profile fields but may not edit authoritative verification/licence fields.
+4. An organisation may edit only its own organisation profile.
+5. Platform statistics are not client writable.
+6. Member-network collections require authentication during the current stabilization phase.
+7. Ownership identifiers on jobs, availability posts and business listings are immutable after creation.
 
-### T6: Large Payload Attack
-- **Actor**: User A
-- **Payload**: `{ "bio": "A" * 1000000 }`
-- **Result**: `PERMISSION_DENIED` (Bio size limit exceeded)
+## Professional verification
 
-### T7: Type Confusion
-- **Actor**: User A
-- **Payload**: `{ "profile_completeness": "ONE HUNDRED" }`
-- **Result**: `PERMISSION_DENIED` (Must be number)
+Authoritative verification fields are controlled by platform admins or appropriately scoped professional-authority admins.
 
-### T8: Creation with Shadow Fields
-- **Actor**: User A
-- **Payload**: `{ "full_name": "A", "user_id": "A", "primary_cadre": "A", "is_admin": true }`
-- **Result**: `PERMISSION_DENIED` (Shadow field not in schema)
+Protected professional fields include:
 
-### T9: Illegal Update of Immutable Field
-- **Actor**: User A
-- **Payload**: Update `user_id` in profile from "A" to "B".
-- **Result**: `PERMISSION_DENIED`
+- `credentialVerificationStatus`
+- `credentialVerifiedAt`
+- `credentialVerifiedByBody`
+- `credentialVerifiedByUid`
+- `credentialRejectionReason`
+- `practisingLicenceStatus`
+- `practisingLicenceYear`
+- `licenceRenewalDate`
+- `licenceExpiryDate`
+- `licenceSuspensionReason`
 
-### T10: Unverified Email Write
-- **Actor**: User with `email_verified: false`
-- **Action**: Create profile.
-- **Result**: `PERMISSION_DENIED` (Verified email required for writes)
+Professionals may submit verification evidence, but submission must not by itself grant verified or active professional standing.
 
-### T11: Cross-User List Exploration
-- **Actor**: User A
-- **Action**: List `user_accounts`
-- **Result**: `PERMISSION_DENIED` (unless restricted where resource.id == auth.uid)
+## Opportunities and marketplace ownership
 
-### T12: Resource Exhaustion (Array Size)
-- **Actor**: User A
-- **Payload**: `{ "areas_of_practice": ["A"] * 1000 }`
-- **Result**: `PERMISSION_DENIED` (Array size limit)
+- Jobs may be created only by the authenticated owning organisation account.
+- Availability posts may be created only by the authenticated owning professional account.
+- Owners may update their own postings.
+- Interest-count updates are narrowly permitted so the current expression-of-interest workflow can operate without granting general write access.
+- Business listing seller identity is immutable after creation.
+
+## Messaging invariants
+
+- A conversation contains exactly two distinct participants at creation.
+- Participants cannot be replaced after conversation creation.
+- Conversation updates are limited to message-preview/read-counter metadata.
+- A message sender must equal the authenticated UID.
+- Message body must be a non-empty string of at most 1000 characters.
+- Message documents cannot be edited or deleted by normal users.
+
+## Prototype controls removed
+
+The stabilization branch removes:
+
+- demo-login account provisioning
+- demo platform-admin provisioning
+- hard-coded privileged email authorization
+- client-side professional-authority auto-provisioning
+- client-controlled platform statistic writes
+- client-side administrative database seeders
+
+Test data must be created only through controlled development tooling and must never be exposed as a production admin-console capability.
+
+## Required negative tests
+
+Firebase Emulator rules tests must cover at minimum:
+
+1. normal user cannot grant themselves admin/authority-admin authority
+2. normal user cannot change `isActive` or `isVerified`
+3. professional cannot change their own verification/licence status
+4. user cannot edit another user's profile
+5. non-owner cannot edit or delete another owner's posting
+6. business seller identity cannot be reassigned
+7. conversation participants cannot be changed
+8. message sender cannot impersonate another user
+9. message body over 1000 characters is denied
+10. authenticated normal user cannot write platform statistics
+
+These tests are required before production readiness. Until emulator tests exist, successful TypeScript/build CI does not certify Firestore authorization behaviour.
