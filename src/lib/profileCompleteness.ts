@@ -44,3 +44,41 @@ export const calculateProfessionalProfileCompleteness = (
 
   return Math.min(score, 100);
 };
+
+
+export interface ProfileMissingItem {
+  key: string;
+  label: string;
+}
+
+export const getProfessionalProfileMissingItems = (
+  profile: ProfessionalCompletenessInput
+): ProfileMissingItem[] => {
+  const items: ProfileMissingItem[] = [];
+
+  if (!hasText(profile.fullName)) items.push({ key: 'fullName', label: 'Full name' });
+  if (!hasText(profile.phone)) items.push({ key: 'phone', label: 'Phone / WhatsApp number' });
+  if (!hasText(profile.district)) items.push({ key: 'district', label: 'District' });
+  if (!hasText(profile.primaryCadre)) items.push({ key: 'primaryCadre', label: 'Primary cadre' });
+  if (!hasText(profile.availabilityStatus)) items.push({ key: 'availabilityStatus', label: 'Professional availability' });
+  if (!hasText(profile.registrationNumber)) items.push({ key: 'registrationNumber', label: 'Professional registration number' });
+  if (!hasText(profile.qualification)) items.push({ key: 'qualification', label: 'Highest qualification' });
+
+  if (
+    !(
+      (typeof profile.yearsExperience === 'number' && Number.isFinite(profile.yearsExperience))
+      || hasText(profile.yearsExperience)
+    )
+  ) {
+    items.push({ key: 'yearsExperience', label: 'Years of experience' });
+  }
+
+  if (!(typeof profile.bio === 'string' && profile.bio.trim().length >= 50)) {
+    items.push({ key: 'bio', label: 'Bio of at least 50 characters' });
+  }
+
+  if (!hasText(profile.profilePhotoUrl)) items.push({ key: 'profilePhotoUrl', label: 'Profile photo' });
+  if (!hasText(profile.cvStoragePath) && !hasText(profile.cvUrl)) items.push({ key: 'cv', label: 'CV' });
+
+  return items;
+};
