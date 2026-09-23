@@ -27,7 +27,7 @@ import BrowseProfessionals from './pages/BrowseProfessionals';
 import BrowseOrganisations from './pages/BrowseOrganisations';
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { user, loading } = useAuth();
+  const { user, userAccount, loading } = useAuth();
   
   if (loading) return (
     <div className="min-h-screen flex items-center justify-center">
@@ -35,8 +35,10 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) =
     </div>
   );
   
-  if (!user) return <Navigate to="/login" state={{ from: window.location.pathname }} />;
-  
+  if (!user || !userAccount || userAccount.isActive === false) {
+    return <Navigate to="/login" state={{ from: window.location.pathname }} />;
+  }
+
   return <>{children}</>;
 };
 
