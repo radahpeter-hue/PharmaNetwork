@@ -116,7 +116,7 @@ const EditOrganisationProfile: React.FC = () => {
       });
 
       await refreshUserData();
-      navigate('/profile', { replace: true });
+      navigate('/profile', { replace: true, state: { organisationUpdated: true } });
     } catch (err) {
       console.error('Organisation profile save failed:', err);
       setError('Something went wrong while saving the organisation profile. Please try again.');
