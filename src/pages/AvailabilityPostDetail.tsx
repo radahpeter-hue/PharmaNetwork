@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { db } from '../lib/firebase';
-import { doc, getDoc, updateDoc, increment, collection, addDoc, query, where, getDocs, Timestamp } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, increment, runTransaction, serverTimestamp } from 'firebase/firestore';
 import { Button } from '../components/Button';
 import { AvailabilityPost, OrganisationProfile } from '../types';
 import { Toast, ToastType } from '../components/Toast';
@@ -56,13 +56,9 @@ const AvailabilityPostDetail: React.FC = () => {
 
     const checkInterest = async () => {
       if (!user || userAccount?.accountType !== 'organisation' || !postId) return;
-      const q = query(
-        collection(db, 'interestEvents'),
-        where('actorId', '==', user.uid),
-        where('targetId', '==', postId)
-      );
-      const snap = await getDocs(q);
-      setHasInterest(!snap.empty);
+      const eventId = `availability_interest_${postId}_${user.uid}`;
+      const snap = await getDoc(doc(db, 'interestEvents', eventId));
+      setHasInterest(snap.exists());
     };
 
     fetchPost();
@@ -70,33 +66,45 @@ const AvailabilityPostDetail: React.FC = () => {
   }, [postId, user, userAccount]);
 
   const handleContact = async () => {
-    if (!post || !user || userAccount?.accountType !== 'organisation') return;
+    if (!post?.id || !user || hasInterest || userAccount?.accountType !== 'organisation') return;
 
     try {
-      // 1. Log interest event
-      await addDoc(collection(db, 'interestEvents'), {
-        actorId: user.uid,
-        targetId: post.id,
-        type: 'availability_interest',
-        timestamp: Timestamp.now()
-      });
+      const eventId = `availability_interest_${post.id}_${user.uid}`;
+      const eventRef = doc(db, 'interestEvents', eventId);
+      const postRef = doc(db, 'availabilityPosts', post.id);
 
-      // 2. Increment count
-      await updateDoc(doc(db, 'availabilityPosts', post.id!), {
-        interestCount: increment(1)
+      const created = await runTransaction(db, async transaction => {
+        const existingEvent = await transaction.get(eventRef);
+        if (existingEvent.exists()) return false;
+
+        transaction.set(eventRef, {
+          actorId: user.uid,
+          targetId: post.id,
+          postOwnerUserId: post.individualUserId,
+          type: 'availability_interest',
+          timestamp: serverTimestamp()
+        });
+
+        transaction.update(postRef, {
+          interestCount: increment(1)
+        });
+
+        return true;
       });
 
       setHasInterest(true);
-      setToast({ isVisible: true, message: 'Contact logged.', type: 'success' });
+      if (created) {
+        setPost(current => current ? { ...current, interestCount: (current.interestCount || 0) + 1 } : current);
+        setToast({ isVisible: true, message: 'Contact interest logged.', type: 'success' });
+      }
 
-      // 3. Open contact link
       const orgProfile = profile as OrganisationProfile;
       const orgName = orgProfile.organisations?.[0]?.organisationName || 'an organisation';
       const message = encodeURIComponent(`Hello ${post.fullName}, I saw your availability post on PharmaNetwork Uganda and would like to discuss an opportunity. I am from ${orgName}.`);
-      
+
       if (post.contactMethod === 'whatsapp') {
         const phone = post.contactDetail.replace(/\D/g, '');
-        window.open(`https://wa.me/${phone}?text=${message}`, '_blank');
+        window.open(`https://wa.me/${phone}?text=${message}`, '_blank', 'noopener,noreferrer');
       } else {
         window.location.href = `mailto:${post.contactDetail}?subject=${encodeURIComponent('Opportunity - PharmaNetwork Uganda')}&body=${message}`;
       }
