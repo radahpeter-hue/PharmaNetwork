@@ -218,7 +218,9 @@ const Profile: React.FC = () => {
                    {/* Verification Panel (Part 11) */}
                    {isIndividual && (() => {
                      const p = profile as IndividualProfile;
-                     const status = p.credentialVerificationStatus || 'unverified';
+                     const status = userAccount?.accountStatus === 'PENDING_AUTHORITY_VERIFICATION'
+                       ? 'pending_review'
+                       : (p.credentialVerificationStatus || 'unverified');
 
                      const handleVerificationSubmit = async (e: React.FormEvent) => {
                        e.preventDefault();
@@ -393,7 +395,7 @@ const Profile: React.FC = () => {
                              <Clock className="text-indigo-600" size={24} />
                              <p className="text-xs font-black text-indigo-900">Request Under Review</p>
                              <p className="text-[11px] font-bold text-indigo-755 leading-relaxed">
-                               Your verification is under review. This usually takes 3 to 5 working days. Our registration board is validating your credentials.
+                               Your verification submission is awaiting review by the responsible professional authority.
                              </p>
                            </div>
                          )}
@@ -405,7 +407,7 @@ const Profile: React.FC = () => {
                                <CheckCircle className="text-emerald-600 fill-white" size={24} />
                                <p className="text-xs font-bold text-emerald-950">Credential Verified</p>
                                <p className="text-[10px] text-emerald-850 font-medium">
-                                 Verified by {p.credentialVerifiedByBody || 'Authorized Body'} on {p.credentialVerifiedAt ? new Date(p.credentialVerifiedAt.seconds * 1050).toLocaleDateString() : 'Active Verification'}.
+                                 Verified by {p.credentialVerifiedByBody || 'Authorized Body'} on {p.credentialVerifiedAt ? new Date(p.credentialVerifiedAt.seconds * 1000).toLocaleDateString() : 'Active Verification'}.
                                </p>
                              </div>
 
