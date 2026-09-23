@@ -1043,3 +1043,83 @@ test('member board queries satisfy active and unexpired read rules', async () =>
   assert.equal(snapshot.size, 1);
   assert.equal(snapshot.docs[0].id, 'board-job-active');
 });
+
+
+test('posting owners can list their own closed and expired history', async () => {
+  const now = Date.now();
+  const future = Timestamp.fromMillis(now + 24 * 60 * 60 * 1000);
+  const past = Timestamp.fromMillis(now - 24 * 60 * 60 * 1000);
+
+  await seed(async db => {
+    await setDoc(doc(db, 'users', 'history-org'), {
+      id: 'history-org',
+      accountType: 'organisation',
+      accountClass: 'organisation',
+      accountStatus: 'ACTIVE',
+      isActive: true,
+      isVerified: false
+    });
+    await setDoc(doc(db, 'users', 'history-professional'), {
+      id: 'history-professional',
+      accountType: 'individual',
+      accountClass: 'professional',
+      accountStatus: 'ACTIVE',
+      isActive: true,
+      isVerified: true
+    });
+
+    await setDoc(doc(db, 'jobPostings', 'history-job-closed'), {
+      organisationUserId: 'history-org',
+      status: 'closed',
+      expiresAt: future
+    });
+    await setDoc(doc(db, 'jobPostings', 'history-job-expired'), {
+      organisationUserId: 'history-org',
+      status: 'active',
+      expiresAt: past
+    });
+
+    await setDoc(doc(db, 'availabilityPosts', 'history-availability-closed'), {
+      individualUserId: 'history-professional',
+      status: 'closed',
+      expiresAt: future
+    });
+    await setDoc(doc(db, 'availabilityPosts', 'history-availability-expired'), {
+      individualUserId: 'history-professional',
+      status: 'active',
+      expiresAt: past
+    });
+
+    await setDoc(doc(db, 'businessListings', 'history-business-sold'), {
+      sellerUserId: 'history-professional',
+      status: 'sold',
+      expiresAt: future
+    });
+    await setDoc(doc(db, 'businessListings', 'history-business-expired'), {
+      sellerUserId: 'history-professional',
+      status: 'active',
+      expiresAt: past
+    });
+  });
+
+  const orgDb = testEnv.authenticatedContext('history-org').firestore();
+  const professionalDb = testEnv.authenticatedContext('history-professional').firestore();
+
+  const jobHistory = await assertSucceeds(getDocs(query(
+    collection(orgDb, 'jobPostings'),
+    where('organisationUserId', '==', 'history-org')
+  )));
+  assert.equal(jobHistory.size, 2);
+
+  const availabilityHistory = await assertSucceeds(getDocs(query(
+    collection(professionalDb, 'availabilityPosts'),
+    where('individualUserId', '==', 'history-professional')
+  )));
+  assert.equal(availabilityHistory.size, 2);
+
+  const businessHistory = await assertSucceeds(getDocs(query(
+    collection(professionalDb, 'businessListings'),
+    where('sellerUserId', '==', 'history-professional')
+  )));
+  assert.equal(businessHistory.size, 2);
+});
