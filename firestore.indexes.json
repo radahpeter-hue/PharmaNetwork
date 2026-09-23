@@ -1,0 +1,19 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "individualProfiles",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "isDirectoryVisible",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "profileCompleteness",
+          "order": "ASCENDING"
+        }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}

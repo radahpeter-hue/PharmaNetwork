@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Button } from '../components/Button';
 import { IndividualProfile, OrganisationProfile } from '../types';
@@ -22,15 +23,18 @@ import {
   Loader2,
   Clock
 } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion } from 'motion/react';
 import { cn } from '../lib/utils';
 import { doc, setDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../lib/firebase';
-import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { getStorage, ref, uploadBytes } from 'firebase/storage';
+import { getProfessionalProfileMissingItems } from '../lib/profileCompleteness';
+import { Toast } from '../components/Toast';
 
 const Profile: React.FC = () => {
   const { user, userAccount, profile, refreshUserData } = useAuth();
-  const [isEditing, setIsEditing] = useState(false);
+  const navigate = useNavigate();
+  const location = useLocation();
 
   // Verification request workflow states
   const [uploading, setUploading] = useState(false);
@@ -48,9 +52,21 @@ const Profile: React.FC = () => {
 
   const isIndividual = 'fullName' in profile;
   const completeness = profile.profileCompleteness || 0;
+  const missingProfileItems = isIndividual
+    ? getProfessionalProfileMissingItems(profile as IndividualProfile)
+    : [];
+
+  const profileUpdated = Boolean((location.state as { profileUpdated?: boolean; organisationUpdated?: boolean } | null)?.profileUpdated);
+  const organisationUpdated = Boolean((location.state as { profileUpdated?: boolean; organisationUpdated?: boolean } | null)?.organisationUpdated);
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-12">
+      <Toast
+        isVisible={profileUpdated || organisationUpdated}
+        type="success"
+        message={organisationUpdated ? 'Organisation profile updated successfully.' : 'Profile updated successfully.'}
+        onClose={() => navigate(location.pathname, { replace: true, state: {} })}
+      />
       {/* Completeness Bar */}
       <div className="bg-zinc-900 text-white p-6 rounded-2xl mb-12 flex flex-col md:flex-row md:items-center justify-between gap-6 overflow-hidden relative">
          <div className="relative z-10">
@@ -74,16 +90,43 @@ const Profile: React.FC = () => {
          <div className="absolute top-0 right-0 w-64 h-64 bg-primary/20 blur-3xl rounded-full translate-x-32 -translate-y-32"></div>
       </div>
 
+      {isIndividual && completeness < 60 && (
+        <div className="mb-8 rounded-2xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-900">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <span className="font-semibold">Your profile is not yet eligible for directory visibility. Complete it to at least 60% and maintain ACTIVE professional status.</span>
+            <button onClick={() => navigate('/profile/edit')} className="font-bold underline underline-offset-2 shrink-0">Complete profile</button>
+          </div>
+          {missingProfileItems.length > 0 && (
+            <div className="mt-4 pt-4 border-t border-amber-200">
+              <p className="text-xs font-black uppercase tracking-widest text-amber-700 mb-2">Missing or incomplete items</p>
+              <ul className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                {missingProfileItems.map(item => (
+                  <li key={item.key}>
+                    <button
+                      type="button"
+                      onClick={() => navigate('/profile/edit')}
+                      className="text-left underline underline-offset-2 hover:text-amber-950"
+                    >
+                      {item.label}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      )}
+
       <div className="bg-white rounded-3xl shadow-xl border border-zinc-100 overflow-hidden">
         {/* Cover Placeholder */}
         <div className="h-40 bg-gradient-to-r from-primary/80 to-primary-light relative">
            <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-10"></div>
-           <button 
-             onClick={() => setIsEditing(!isEditing)}
+           <button
+             onClick={() => navigate(isIndividual ? '/profile/edit' : '/profile/edit/organisation')}
              className="absolute bottom-4 right-6 bg-white/20 hover:bg-white/30 backdrop-blur-md text-white px-4 py-2 rounded-full text-xs font-bold flex items-center gap-2 transition-all"
            >
               <Edit size={14} />
-              {isEditing ? 'Cancel Edit' : 'Edit Profile'}
+              Edit Profile
            </button>
         </div>
 
@@ -140,25 +183,7 @@ const Profile: React.FC = () => {
             </div>
           </div>
 
-          <AnimatePresence mode="wait">
-            {isEditing ? (
-              <motion.div 
-                key="editing"
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                className="bg-zinc-50 p-8 rounded-2xl border border-dashed border-zinc-200 text-center"
-              >
-                <div className="w-16 h-16 bg-zinc-100 rounded-full flex items-center justify-center mx-auto mb-4 text-zinc-400">
-                   <Edit size={24} />
-                </div>
-                <h3 className="font-bold text-zinc-900 mb-2">Edit Mode Coming Soon</h3>
-                <p className="text-zinc-500 text-sm mb-6">Full profile editing is being built for Week 2.</p>
-                <Button size="sm" onClick={() => setIsEditing(false)}>Back to View</Button>
-              </motion.div>
-            ) : (
-              <motion.div 
-                key="view"
+          <motion.div
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -10 }}
@@ -183,7 +208,7 @@ const Profile: React.FC = () => {
                            <>
                               <DetailItem icon={Calendar} label="Years Experience" value={(profile as IndividualProfile).yearsExperience.replace('_', ' ')} />
                               <DetailItem icon={Award} label="Highest Qualification" value={(profile as IndividualProfile).qualification} />
-                              <DetailItem icon={FileText} label="Registration" value={(profile as IndividualProfile).registrationNumber || "Self-declared"} />
+                              <DetailItem icon={FileText} label="Registration" value={(profile as IndividualProfile).registrationNumber || "Not provided"} />
                               <DetailItem icon={Phone} label="Contact" value={(profile as IndividualProfile).phone} />
                            </>
                          ) : (
@@ -228,7 +253,9 @@ const Profile: React.FC = () => {
                    {/* Verification Panel (Part 11) */}
                    {isIndividual && (() => {
                      const p = profile as IndividualProfile;
-                     const status = p.credentialVerificationStatus || 'unverified';
+                     const status = userAccount?.accountStatus === 'PENDING_AUTHORITY_VERIFICATION'
+                       ? 'pending_review'
+                       : (p.credentialVerificationStatus || 'unverified');
 
                      const handleVerificationSubmit = async (e: React.FormEvent) => {
                        e.preventDefault();
@@ -256,17 +283,15 @@ const Profile: React.FC = () => {
                          const pracRef = ref(storage, `verificationDocs/${user!.uid}/practising_certificate_${currentYear}`);
 
                          const regUpload = await uploadBytes(regRef, regFile);
-                         const regUrl = await getDownloadURL(regUpload.ref);
                          const pracUpload = await uploadBytes(pracRef, pracFile);
-                         const pracUrl = await getDownloadURL(pracUpload.ref);
 
                          // Verification submission is evidence only. It does not change
                          // authoritative professional verification/licence fields.
                          const vdRef = doc(db, 'verificationDocuments', user!.uid);
                          await setDoc(vdRef, {
                            userId: user!.uid,
-                           registrationCertificateUrl: regUrl,
-                           practisingCertificateUrl: pracUrl,
+                           registrationCertificatePath: regUpload.ref.fullPath,
+                           practisingCertificatePath: pracUpload.ref.fullPath,
                            submittedAt: serverTimestamp(),
                            submittedForYear: currentYear,
                            submissionType: 'initial_verification',
@@ -314,12 +339,11 @@ const Profile: React.FC = () => {
                          const currentYear = new Date().getFullYear();
                          const pracRef = ref(storage, `verificationDocs/${user!.uid}/practising_certificate_${currentYear}`);
                          const uploadSnap = await uploadBytes(pracRef, newPracFile);
-                         const newPracUrl = await getDownloadURL(uploadSnap.ref);
 
                          const vdRef = doc(db, 'verificationDocuments', user!.uid);
                          await setDoc(vdRef, {
                            userId: user!.uid,
-                           practisingCertificateUrl: newPracUrl,
+                           practisingCertificatePath: uploadSnap.ref.fullPath,
                            submittedAt: serverTimestamp(),
                            submittedForYear: currentYear,
                            submissionType: 'annual_renewal',
@@ -406,7 +430,7 @@ const Profile: React.FC = () => {
                              <Clock className="text-indigo-600" size={24} />
                              <p className="text-xs font-black text-indigo-900">Request Under Review</p>
                              <p className="text-[11px] font-bold text-indigo-755 leading-relaxed">
-                               Your verification is under review. This usually takes 3 to 5 working days. Our registration board is validating your credentials.
+                               Your verification submission is awaiting review by the responsible professional authority.
                              </p>
                            </div>
                          )}
@@ -418,7 +442,7 @@ const Profile: React.FC = () => {
                                <CheckCircle className="text-emerald-600 fill-white" size={24} />
                                <p className="text-xs font-bold text-emerald-950">Credential Verified</p>
                                <p className="text-[10px] text-emerald-850 font-medium">
-                                 Verified by {p.credentialVerifiedByBody || 'Authorized Body'} on {p.credentialVerifiedAt ? new Date(p.credentialVerifiedAt.seconds * 1050).toLocaleDateString() : 'Active Verification'}.
+                                 Verified by {p.credentialVerifiedByBody || 'Authorized Body'} on {p.credentialVerifiedAt ? new Date(p.credentialVerifiedAt.seconds * 1000).toLocaleDateString() : 'Active Verification'}.
                                </p>
                              </div>
 
@@ -522,9 +546,7 @@ const Profile: React.FC = () => {
                      </div>
                    )}
                 </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
+          </motion.div>
         </div>
       </div>
     </div>

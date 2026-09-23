@@ -23,11 +23,9 @@ import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../lib/utils';
 import { useAuth } from '../context/AuthContext';
 import { AccountType, AvailabilityStatus, EmploymentType, OrganizationType, PrimaryCadre } from '../types';
+import { calculateProfessionalProfileCompleteness } from '../lib/profileCompleteness';
+import { PROFESSIONAL_CADRES, UGANDA_DISTRICTS } from '../constants';
 
-const DISTRICTS = [
-  'Kampala', 'Wakiso', 'Mukono', 'Entebbe', 'Gulu', 'Mbarara', 'Jinja', 'Mbale', 'Arua', 'Lira', 
-  'Masaka', 'Fort Portal', 'Soroti', 'Kabale', 'Kasese', 'Hoima', 'Tororo', 'Iganga', 'Moroto', 'Kitgum', 'Other'
-];
 
 type RegistrationStep = 1 | 2 | 3 | 4;
 
@@ -58,11 +56,11 @@ const Register: React.FC = () => {
   const [individualDetails, setIndividualDetails] = useState({
     primaryCadre: 'pharmacist' as PrimaryCadre,
     registrationNumber: '',
-    qualification: 'Bachelor of Pharmacy BPharm',
+    qualification: '',
     qualificationYear: new Date().getFullYear(),
     yearsExperience: 'less_than_1',
     areasOfPractice: [] as string[],
-    availabilityStatus: 'actively_seeking' as AvailabilityStatus,
+    availabilityStatus: '' as AvailabilityStatus | '',
     preferredEmploymentTypes: [] as EmploymentType[],
     bio: ''
   });
@@ -90,6 +88,10 @@ const Register: React.FC = () => {
     try {
       if (baseInfo.password !== baseInfo.confirmPassword) {
         throw new Error('Passwords do not match');
+      }
+
+      if (accountType === 'individual' && !individualDetails.availabilityStatus) {
+        throw new Error('Please select your current professional availability status.');
       }
 
       // 1. Sign up user
@@ -160,17 +162,19 @@ const Register: React.FC = () => {
   };
 
   const calculateCompleteness = (type: AccountType) => {
-    if (type === 'individual') {
-      let score = 0;
-      if (baseInfo.fullName) score += 10;
-      if (baseInfo.phone) score += 10;
-      if (individualDetails.bio) score += 20;
-      if (individualDetails.registrationNumber) score += 20;
-      if (individualDetails.primaryCadre) score += 20;
-      if (individualDetails.areasOfPractice.length > 0) score += 20;
-      return score;
-    }
-    return 60;
+    if (type !== 'individual') return 60;
+
+    return calculateProfessionalProfileCompleteness({
+      fullName: baseInfo.fullName,
+      phone: baseInfo.phone,
+      district: baseInfo.district,
+      primaryCadre: individualDetails.primaryCadre,
+      availabilityStatus: individualDetails.availabilityStatus,
+      registrationNumber: individualDetails.registrationNumber,
+      qualification: individualDetails.qualification,
+      yearsExperience: individualDetails.yearsExperience,
+      bio: individualDetails.bio
+    });
   };
 
   if (!accountType) {
@@ -278,7 +282,7 @@ const Register: React.FC = () => {
                      value={baseInfo.district}
                      onChange={e => setBaseInfo({...baseInfo, district: e.target.value})}
                    >
-                     {DISTRICTS.map(d => <option key={d} value={d}>{d}</option>)}
+                     {UGANDA_DISTRICTS.map(d => <option key={d} value={d}>{d}</option>)}
                    </select>
                  </div>
                  <div className="space-y-2">
@@ -339,12 +343,12 @@ const Register: React.FC = () => {
 
                <div className="space-y-4 mb-12">
                   {[
-                    { id: 'pharmacy_professional', label: 'I am a pharmacy professional (pharmacist, technician, assistant, dispenser)' },
-                    { id: 'pharmacy_owner', label: 'I own or manage a pharmacy or pharmaceutical business' },
-                    { id: 'manufacturing', label: 'I work in pharmaceutical manufacturing or production' },
-                    { id: 'import_distribution', label: 'I work in pharmaceutical import, distribution, or wholesale' },
-                    { id: 'medical_sales', label: 'I am a medical sales representative or marketing agent' },
-                    { id: 'regulatory_qa', label: 'I work in regulatory affairs or quality assurance' }
+                    { id: 'regulated_health_professional', label: 'Regulated health professional' },
+                    { id: 'pharmaceutical_industry', label: 'Pharmaceutical industry / manufacturing' },
+                    { id: 'regulatory_qa', label: 'Regulatory affairs / quality assurance' },
+                    { id: 'supply_chain_procurement', label: 'Health supply chain / procurement' },
+                    { id: 'sales_marketing', label: 'Medical sales / marketing' },
+                    { id: 'research_academia', label: 'Research / academia' }
                   ].map(role => (
                     <label 
                       key={role.id} 
@@ -403,8 +407,6 @@ const Register: React.FC = () => {
                   roles={individualRoles}
                   details={individualDetails}
                   setDetails={setIndividualDetails}
-                  organisations={organisations}
-                  setOrganisations={setOrganisations}
                   onBack={handleBack}
                   onSubmit={handleSubmit}
                   loading={loading}
@@ -616,9 +618,8 @@ const OrganisationForm = ({ organisations, setOrganisations, onBack, onNext, hid
    );
 };
 
-const IndividualDetailsForm = ({ roles, details, setDetails, organisations, setOrganisations, onBack, onSubmit, loading, error }: any) => {
-   const isProfessional = roles.includes('pharmacy_professional');
-   const isOwner = roles.includes('pharmacy_owner');
+const IndividualDetailsForm = ({ roles, details, setDetails, onBack, onSubmit, loading, error }: any) => {
+   const isProfessional = true;
 
    return (
       <div className="space-y-8">
@@ -640,34 +641,28 @@ const IndividualDetailsForm = ({ roles, details, setDetails, organisations, setO
                               value={details.primaryCadre}
                               onChange={e => setDetails({...details, primaryCadre: e.target.value})}
                            >
-                              <option value="pharmacist">Registered Pharmacist</option>
-                              <option value="pharmacy_technician">Pharmacy Technician</option>
-                              <option value="pharmacy_assistant">Pharmacy Assistant / Dispenser</option>
-                              <option value="drug_shop_auxiliary">Drug Shop Auxiliary Staff</option>
-                              <option value="other">Other</option>
+                              {PROFESSIONAL_CADRES.map((cadre) => (
+                                <option key={cadre.id} value={cadre.id}>{cadre.label}</option>
+                              ))}
                            </select>
                         </div>
                         <div className="space-y-2">
                            <label className="text-sm font-semibold">Registration Number</label>
                            <input 
                               className="w-full px-4 py-3 bg-white border border-zinc-200 rounded-xl outline-none focus:ring-2 focus:ring-primary"
-                              placeholder="Enter your PSU or NDA number"
+                              placeholder="Enter your professional registration number"
                               value={details.registrationNumber}
                               onChange={e => setDetails({...details, registrationNumber: e.target.value})}
                            />
                         </div>
                         <div className="space-y-2">
                            <label className="text-sm font-semibold">Highest Qualification</label>
-                           <select 
+                           <input
                               className="w-full px-4 py-3 bg-white border border-zinc-200 rounded-xl outline-none focus:ring-2 focus:ring-primary"
+                              placeholder="Enter your highest relevant qualification"
                               value={details.qualification}
                               onChange={e => setDetails({...details, qualification: e.target.value})}
-                           >
-                              <option value="Bachelor of Pharmacy BPharm">Bachelor of Pharmacy BPharm</option>
-                              <option value="Diploma in Pharmacy">Diploma in Pharmacy</option>
-                              <option value="Certificate in Pharmacy">Certificate in Pharmacy</option>
-                              <option value="Enrolled Nurse / Midwife">Enrolled Nurse / Midwife</option>
-                           </select>
+                           />
                         </div>
                         <div className="space-y-2">
                            <label className="text-sm font-semibold">Years Experience</label>
@@ -691,7 +686,7 @@ const IndividualDetailsForm = ({ roles, details, setDetails, organisations, setO
                   <div className="space-y-2">
                      <label className="text-sm font-semibold">Areas of Practice</label>
                      <div className="flex flex-wrap gap-2">
-                        {['Retail / Community', 'Hospital / Clinical', 'Industrial / Manufacturing', 'Wholesale / Distribution', 'Regulatory Affairs', 'Research', 'Drug Shop'].map(area => (
+                        {['Retail / Community', 'Hospital / Clinical', 'Nursing / Midwifery', 'Allied Health', 'Medical / Dental Practice', 'Laboratory Services', 'Industrial / Manufacturing', 'Wholesale / Distribution', 'Regulatory Affairs', 'Research', 'Drug Shop'].map(area => (
                            <button 
                              key={area}
                              onClick={() => {
@@ -748,15 +743,6 @@ const IndividualDetailsForm = ({ roles, details, setDetails, organisations, setO
                </div>
             </div>
 
-            {isOwner && (
-               <div className="mt-16 pt-16 border-t border-zinc-100">
-                  <OrganisationForm 
-                     organisations={organisations} 
-                     setOrganisations={setOrganisations}
-                     hideNav={true}
-                  />
-               </div>
-            )}
 
             {error && (
                <div className="mt-8 bg-red-50 text-red-600 p-4 rounded-xl text-sm flex items-center gap-2">

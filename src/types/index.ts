@@ -47,20 +47,31 @@ export interface ProfessionalAuthorityAdmin {
   lastLoginAt?: any;
 }
 
-export type PrimaryCadre = 
-  | 'pharmacist' 
-  | 'pharmacy_technician' 
-  | 'pharmacy_assistant' 
-  | 'dispenser' 
-  | 'drug_shop_auxiliary' 
-  | 'qa_qc_officer' 
-  | 'procurement_officer' 
-  | 'medical_sales_rep' 
-  | 'pharmacovigilance_officer' 
-  | 'regulatory_affairs' 
-  | 'production_personnel' 
-  | 'stores_officer' 
-  | 'stores_manager' 
+export type PrimaryCadre =
+  | 'pharmacist'
+  | 'pharmacy_technician'
+  | 'pharmacy_assistant'
+  | 'dispenser'
+  | 'drug_shop_auxiliary'
+  | 'nurse'
+  | 'midwife'
+  | 'clinical_officer'
+  | 'medical_laboratory_professional'
+  | 'physiotherapist'
+  | 'radiographer'
+  | 'occupational_therapist'
+  | 'nutritionist_dietitian'
+  | 'medical_practitioner'
+  | 'dental_practitioner'
+  | 'other_allied_health_professional'
+  | 'qa_qc_officer'
+  | 'procurement_officer'
+  | 'medical_sales_rep'
+  | 'pharmacovigilance_officer'
+  | 'regulatory_affairs'
+  | 'production_personnel'
+  | 'stores_officer'
+  | 'stores_manager'
   | 'other';
 
 export type AvailabilityStatus = 'actively_seeking' | 'open_to_offers' | 'not_available';
@@ -103,6 +114,7 @@ export interface IndividualProfile {
   bio: string;
   profilePhotoUrl?: string;
   cvUrl?: string;
+  cvStoragePath?: string;
   profileCompleteness: number;
   isDirectoryVisible?: boolean;
   createdAt: any;
@@ -128,6 +140,7 @@ export interface OrganisationProfile {
     about: string;
     branchCount: string;
     isHiring: boolean;
+    logoUrl?: string;
   }[];
   createdAt: any;
   updatedAt: any;

@@ -38,11 +38,14 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { IndividualProfile, ProfessionalAuthorityAdmin } from '../types';
+import { openProtectedStorageFile } from '../lib/storageAccess';
 
 interface VerificationDoc {
   userId: string;
-  registrationCertificateUrl: string;
-  practisingCertificateUrl: string;
+  registrationCertificatePath?: string;
+  practisingCertificatePath?: string;
+  registrationCertificateUrl?: string; // legacy compatibility only
+  practisingCertificateUrl?: string; // legacy compatibility only
   additionalDocumentUrls?: string[];
   submittedAt: any;
   submittedForYear: number;
@@ -50,6 +53,7 @@ interface VerificationDoc {
   reviewedByUid?: string;
   reviewedByBody?: string;
   reviewNotes?: string;
+  submissionStatus?: 'pending_review' | 'approved' | 'rejected' | 'more_information_required';
 }
 
 export const BodyAdminConsole: React.FC = () => {
@@ -79,6 +83,29 @@ export const BodyAdminConsole: React.FC = () => {
   const [showRequestInfoForm, setShowRequestInfoForm] = useState(false);
 
   const [savingAction, setSavingAction] = useState(false);
+
+  const openVerificationEvidence = async (
+    storagePath?: string,
+    legacyUrl?: string,
+    fallbackFileName = 'verification-document'
+  ) => {
+    try {
+      if (storagePath) {
+        await openProtectedStorageFile(storagePath, fallbackFileName);
+        return;
+      }
+
+      if (legacyUrl) {
+        window.open(legacyUrl, '_blank', 'noopener,noreferrer');
+        return;
+      }
+
+      alert('No verification document is available for this submission.');
+    } catch (error) {
+      console.error('Unable to open verification evidence:', error);
+      alert('Unable to open this verification document. Check your authority access and try again.');
+    }
+  };
 
   // Single Licence Update Modal
   const [activeUpdateLicenceProfile, setActiveUpdateLicenceProfile] = useState<any | null>(null);
@@ -464,7 +491,9 @@ export const BodyAdminConsole: React.FC = () => {
   }
 
   // Segment queues based on filters/conditions
-  const currentQueue = profiles.filter(p => p.credentialVerificationStatus === 'pending_review');
+  const currentQueue = profiles.filter(
+    p => verificationDocs[p.id]?.submissionStatus === 'pending_review'
+  );
   
   const verifiedProfiles = profiles.filter(p => p.credentialVerificationStatus === 'verified');
   
@@ -1154,77 +1183,59 @@ export const BodyAdminConsole: React.FC = () => {
                   {verificationDocs[activeReviewProfile.id] ? (
                     <div className="space-y-4">
                       
-                      {/* Registration Certificate view card */}
-                      <div className="bg-white p-4 rounded-2xl border border-zinc-200">
-                        <div className="flex items-center justify-between mb-3">
-                          <p className="text-xs font-extrabold text-zinc-800 flex items-center gap-1.5">
-                            <FileCheck size={16} className="text-indigo-600" />
-                            <span>1. Registration Certificate</span>
-                          </p>
-                          <a 
-                            href={verificationDocs[activeReviewProfile.id].registrationCertificateUrl} 
-                            target="_blank" 
-                            rel="noreferrer"
-                            className="bg-zinc-50 hover:bg-zinc-100 border border-zinc-200 p-1 px-2.5 rounded text-[10px] font-bold text-zinc-600 flex items-center gap-1 cursor-pointer"
-                          >
-                            <span>Open New Window</span>
-                            <ExternalLink size={12} />
-                          </a>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="bg-white p-4 rounded-2xl border border-zinc-200">
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <p className="text-xs font-extrabold text-zinc-800 flex items-center gap-1.5">
+                                <FileCheck size={16} className="text-indigo-600" />
+                                <span>Registration Certificate</span>
+                              </p>
+                              <p className="text-[10px] text-zinc-400 mt-2">
+                                Protected document. Access is checked against your professional-authority scope.
+                              </p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => openVerificationEvidence(
+                                verificationDocs[activeReviewProfile.id].registrationCertificatePath,
+                                verificationDocs[activeReviewProfile.id].registrationCertificateUrl,
+                                'registration-certificate'
+                              )}
+                              className="bg-zinc-50 hover:bg-zinc-100 border border-zinc-200 px-3 py-2 rounded-xl text-[10px] font-bold text-zinc-600 flex items-center gap-1"
+                            >
+                              Open
+                              <ExternalLink size={12} />
+                            </button>
+                          </div>
                         </div>
-                        
-                        <div className="h-44 bg-zinc-100 border border-dashed border-zinc-200 rounded-xl overflow-hidden flex items-center justify-center relative">
-                          <img 
-                            src={verificationDocs[activeReviewProfile.id].registrationCertificateUrl || 'https://via.placeholder.com/300x150?text=Registration+Certificate'} 
-                            alt="Registration certificate cert" 
-                            className="h-full w-full object-cover"
-                            onError={(e) => {
-                              // If broken image URL, display solid vector placeholder
-                              const el = e.currentTarget;
-                              el.style.display = 'none';
-                              const pNode = el.parentNode as HTMLElement;
-                              if (pNode) {
-                                pNode.innerHTML = `<div class="p-6 text-center"><p class="text-[10px] font-mono text-zinc-500 font-bold">${verificationDocs[activeReviewProfile.id].registrationCertificateUrl.substring(0, 48)}...</p></div>`;
-                              }
-                            }}
-                          />
+
+                        <div className="bg-white p-4 rounded-2xl border border-zinc-200">
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <p className="text-xs font-extrabold text-zinc-800 flex items-center gap-1.5">
+                                <FileText size={16} className="text-indigo-600" />
+                                <span>Annual Practising Certificate</span>
+                              </p>
+                              <p className="text-[10px] text-zinc-400 mt-2">
+                                Protected document. Access is checked against your professional-authority scope.
+                              </p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => openVerificationEvidence(
+                                verificationDocs[activeReviewProfile.id].practisingCertificatePath,
+                                verificationDocs[activeReviewProfile.id].practisingCertificateUrl,
+                                'practising-certificate'
+                              )}
+                              className="bg-zinc-50 hover:bg-zinc-100 border border-zinc-200 px-3 py-2 rounded-xl text-[10px] font-bold text-zinc-600 flex items-center gap-1"
+                            >
+                              Open
+                              <ExternalLink size={12} />
+                            </button>
+                          </div>
                         </div>
                       </div>
-
-                      {/* Practising Certificate view card */}
-                      <div className="bg-white p-4 rounded-2xl border border-zinc-200">
-                        <div className="flex items-center justify-between mb-3">
-                          <p className="text-xs font-extrabold text-zinc-800 flex items-center gap-1.5">
-                            <FileText size={16} className="text-indigo-600" />
-                            <span>2. Practising Permit (Annual)</span>
-                          </p>
-                          <a 
-                            href={verificationDocs[activeReviewProfile.id].practisingCertificateUrl} 
-                            target="_blank" 
-                            rel="noreferrer"
-                            className="bg-zinc-50 hover:bg-zinc-100 border border-zinc-200 p-1 px-2.5 rounded text-[10px] font-bold text-zinc-600 flex items-center gap-1 cursor-pointer"
-                          >
-                            <span>Open New Window</span>
-                            <ExternalLink size={12} />
-                          </a>
-                        </div>
-                        
-                        <div className="h-44 bg-zinc-100 border border-dashed border-zinc-200 rounded-xl overflow-hidden flex items-center justify-center relative">
-                          <img 
-                            src={verificationDocs[activeReviewProfile.id].practisingCertificateUrl || 'https://via.placeholder.com/300x150?text=Practising+Certificate'} 
-                            alt="Practising certificate permit" 
-                            className="h-full w-full object-cover"
-                            onError={(e) => {
-                              const el = e.currentTarget;
-                              el.style.display = 'none';
-                              const pNode = el.parentNode as HTMLElement;
-                              if (pNode) {
-                                pNode.innerHTML = `<div class="p-6 text-center"><p class="text-[10px] font-mono text-zinc-500 font-bold">${verificationDocs[activeReviewProfile.id].practisingCertificateUrl.substring(0, 48)}...</p></div>`;
-                              }
-                            }}
-                          />
-                        </div>
-                      </div>
-
                     </div>
                   ) : (
                     <div className="bg-amber-50 border border-amber-100 text-amber-800 p-4 rounded-xl text-xs flex gap-2 font-medium">

@@ -3,6 +3,7 @@ import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { db } from '../lib/firebase';
 import { doc, getDoc } from 'firebase/firestore';
 import { IndividualProfile, OrganisationProfile } from '../types';
+import { openProtectedStorageFile } from '../lib/storageAccess';
 import { Button } from '../components/Button';
 import { ReportButton } from '../components/ReportButton';
 import { 
@@ -70,6 +71,22 @@ export const PublicProfile: React.FC = () => {
     }
   };
 
+  const openCv = async (profile: IndividualProfile) => {
+    try {
+      if (profile.cvStoragePath) {
+        await openProtectedStorageFile(profile.cvStoragePath, 'professional-cv.pdf');
+        return;
+      }
+
+      if (profile.cvUrl) {
+        window.open(profile.cvUrl, '_blank', 'noopener,noreferrer');
+      }
+    } catch (error) {
+      console.error('Unable to open CV:', error);
+      alert('Unable to open this CV. Please try again.');
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-zinc-50 flex flex-col items-center justify-center p-6">
@@ -98,6 +115,16 @@ export const PublicProfile: React.FC = () => {
 
   const indProfile = isIndividual ? (profile as IndividualProfile) : null;
   const orgProfile = !isIndividual ? (profile as OrganisationProfile) : null;
+
+  if (!isIndividual && orgProfile) {
+    return (
+      <OrganisationMemberProfile
+        profile={orgProfile}
+        ownerUid={uid!}
+        onBack={goBackAndPrev}
+      />
+    );
+  }
 
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-10 min-h-screen">
@@ -229,6 +256,19 @@ export const PublicProfile: React.FC = () => {
                   <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block mb-0.5">Qualification</label>
                   <p className="text-zinc-950">{indProfile?.qualification || 'Not provided'}</p>
                 </div>
+                {(indProfile?.cvStoragePath || indProfile?.cvUrl) && (
+                  <div>
+                    <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block mb-1.5">Curriculum Vitae</label>
+                    <button
+                      type="button"
+                      onClick={() => indProfile && openCv(indProfile)}
+                      className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-zinc-200 bg-zinc-50 hover:bg-zinc-100 text-xs font-bold text-zinc-700"
+                    >
+                      <FileText size={14} className="text-primary" />
+                      Open CV
+                    </button>
+                  </div>
+                )}
                 <div>
                   <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block mb-0.5 font-sans">Experience</label>
                   <p className="text-zinc-950">{indProfile?.yearsExperience ? `${indProfile.yearsExperience} Years` : 'Not provided'}</p>
@@ -337,3 +377,99 @@ export const PublicProfile: React.FC = () => {
     </div>
   );
 };
+
+const OrganisationMemberProfile: React.FC<{
+  profile: OrganisationProfile;
+  ownerUid: string;
+  onBack: () => void;
+}> = ({ profile, ownerUid, onBack }) => (
+  <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-10 min-h-screen">
+    <button
+      onClick={onBack}
+      className="flex items-center gap-2 text-zinc-500 hover:text-primary font-bold text-sm mb-6 transition-colors"
+    >
+      <ChevronLeft size={16} />
+      Back
+    </button>
+
+    <div className="bg-white rounded-3xl border border-zinc-200 shadow-lg p-7 md:p-9 mb-8">
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <p className="text-xs font-black uppercase tracking-widest text-primary mb-2">Organisation account</p>
+          <h1 className="text-3xl font-black text-zinc-950">Registered Organisations</h1>
+          <p className="text-sm text-zinc-500 mt-2">
+            This member account manages {profile.organisations.length} organisation{profile.organisations.length === 1 ? '' : 's'}.
+          </p>
+        </div>
+        <ReportButton
+          contentType="profile"
+          contentId={ownerUid}
+          contentOwnerId={ownerUid}
+          contentTitle={profile.organisations[0]?.organisationName || 'Organisation account'}
+        />
+      </div>
+    </div>
+
+    <div className="space-y-6">
+      {profile.organisations.map((organisation) => (
+        <section key={organisation.id} className="bg-white rounded-3xl border border-zinc-200 shadow-sm p-6 md:p-8">
+          <div className="flex items-start gap-4 mb-6">
+            <div className="w-14 h-14 rounded-2xl bg-primary/10 text-primary flex items-center justify-center shrink-0 overflow-hidden">
+              {organisation.logoUrl ? (
+                <img src={organisation.logoUrl} alt="" className="w-full h-full object-cover" />
+              ) : (
+                <Building size={26} />
+              )}
+            </div>
+            <div className="flex-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <h2 className="text-xl font-black text-zinc-950">{organisation.organisationName}</h2>
+                {organisation.isHiring && (
+                  <span className="text-[10px] font-black uppercase tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-100 px-2.5 py-1 rounded-full">
+                    Hiring
+                  </span>
+                )}
+              </div>
+              <div className="mt-2 flex flex-wrap gap-3 text-xs font-semibold text-zinc-500">
+                <span className="inline-flex items-center gap-1.5">
+                  <MapPin size={14} />
+                  {organisation.district}, Uganda
+                </span>
+                <span className="inline-flex items-center gap-1.5">
+                  <Briefcase size={14} />
+                  {organisation.branchCount || '1'} branch{organisation.branchCount === '1' ? '' : 'es'}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap gap-2 mb-6">
+            {organisation.organisationTypes.map((type) => (
+              <span key={type} className="px-3 py-1.5 rounded-xl bg-zinc-100 text-zinc-700 text-[10px] font-black uppercase tracking-wide">
+                {type.replace(/_/g, ' ')}
+              </span>
+            ))}
+          </div>
+
+          <p className="text-sm text-zinc-600 leading-relaxed mb-6">
+            {organisation.about || 'No organisation description has been added yet.'}
+          </p>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-5 border-t border-zinc-100">
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-widest text-zinc-400 mb-1">Licence / registration number</p>
+              <p className="text-sm font-semibold text-zinc-800">{organisation.ndaLicenceNumber || 'Not provided'}</p>
+            </div>
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-widest text-zinc-400 mb-1">Contact</p>
+              <p className="text-sm font-semibold text-zinc-800 inline-flex items-center gap-1.5">
+                <Phone size={14} className="text-zinc-400" />
+                {organisation.contactPhone || 'Not provided'}
+              </p>
+            </div>
+          </div>
+        </section>
+      ))}
+    </div>
+  </div>
+);

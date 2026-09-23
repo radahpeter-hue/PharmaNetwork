@@ -1,0 +1,145 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isPlatformAdmin() {
+      return isSignedIn()
+        && ('admin' in request.auth.token)
+        && request.auth.token.admin == true;
+    }
+
+    function isActiveMember() {
+      return isSignedIn()
+        && firestore.exists(/databases/(default)/documents/users/$(request.auth.uid))
+        && firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.isActive == true;
+    }
+
+    function isVisibleProfessional(userId) {
+      return firestore.exists(/databases/(default)/documents/individualProfiles/$(userId))
+        && firestore.get(/databases/(default)/documents/individualProfiles/$(userId)).data.isDirectoryVisible == true
+        && firestore.get(/databases/(default)/documents/individualProfiles/$(userId)).data.profileCompleteness >= 60;
+    }
+
+    function isAuthorityAdmin() {
+      return isSignedIn()
+        && ('authority_admin' in request.auth.token)
+        && request.auth.token.authority_admin == true
+        && firestore.exists(/databases/(default)/documents/professionalAuthorityAdmins/$(request.auth.uid))
+        && firestore.get(/databases/(default)/documents/professionalAuthorityAdmins/$(request.auth.uid)).data.isActive == true;
+    }
+
+    function authorityCanAccessProfessional(userId) {
+      let adminRecord = firestore.get(
+        /databases/(default)/documents/professionalAuthorityAdmins/$(request.auth.uid)
+      ).data;
+      let professionalProfile = firestore.get(
+        /databases/(default)/documents/individualProfiles/$(userId)
+      ).data;
+
+      return isAuthorityAdmin()
+        && firestore.exists(/databases/(default)/documents/individualProfiles/$(userId))
+        && professionalProfile.primaryCadre in adminRecord.scopedCadres
+        && firestore.exists(
+          /databases/(default)/documents/professionalAuthorities/$(adminRecord.authorityId)
+        )
+        && professionalProfile.primaryCadre in firestore.get(
+          /databases/(default)/documents/professionalAuthorities/$(adminRecord.authorityId)
+        ).data.governedCadres;
+    }
+
+    function isImageUpload(maxBytes) {
+      return request.resource != null
+        && request.resource.size <= maxBytes
+        && request.resource.contentType.matches('image/(jpeg|png)');
+    }
+
+    function isPdfUpload(maxBytes) {
+      return request.resource != null
+        && request.resource.size <= maxBytes
+        && request.resource.contentType == 'application/pdf';
+    }
+
+    function isVerificationUpload(maxBytes) {
+      return request.resource != null
+        && request.resource.size <= maxBytes
+        && (
+          request.resource.contentType == 'application/pdf'
+          || request.resource.contentType == 'image/jpeg'
+          || request.resource.contentType == 'image/png'
+        );
+    }
+
+    match /profilePhotos/{userId}/{fileName} {
+      allow read: if isSignedIn() && (
+        request.auth.uid == userId
+        || (isActiveMember() && isVisibleProfessional(userId))
+        || isPlatformAdmin()
+      );
+
+      allow create, update: if isSignedIn()
+        && request.auth.uid == userId
+        && isImageUpload(2 * 1024 * 1024);
+
+      allow delete: if isSignedIn() && (
+        request.auth.uid == userId
+        || isPlatformAdmin()
+      );
+    }
+
+    match /cvFiles/{userId}/{fileName} {
+      allow read: if isSignedIn() && (
+        request.auth.uid == userId
+        || (isActiveMember() && isVisibleProfessional(userId))
+        || isPlatformAdmin()
+      );
+
+      allow create, update: if isSignedIn()
+        && request.auth.uid == userId
+        && isPdfUpload(5 * 1024 * 1024);
+
+      allow delete: if isSignedIn() && (
+        request.auth.uid == userId
+        || isPlatformAdmin()
+      );
+    }
+
+    match /orgLogos/{userId}/{orgId}/{fileName} {
+      allow read: if isSignedIn() && (
+        request.auth.uid == userId
+        || isActiveMember()
+        || isPlatformAdmin()
+      );
+
+      allow create, update: if isSignedIn()
+        && request.auth.uid == userId
+        && isImageUpload(2 * 1024 * 1024);
+
+      allow delete: if isSignedIn() && (
+        request.auth.uid == userId
+        || isPlatformAdmin()
+      );
+    }
+
+    match /verificationDocs/{userId}/{fileName} {
+      allow read: if isSignedIn() && (
+        request.auth.uid == userId
+        || isPlatformAdmin()
+        || authorityCanAccessProfessional(userId)
+      );
+
+      allow create, update: if isSignedIn()
+        && request.auth.uid == userId
+        && isVerificationUpload(5 * 1024 * 1024);
+
+      allow delete: if isPlatformAdmin();
+    }
+
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

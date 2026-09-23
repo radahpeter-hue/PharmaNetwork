@@ -12,11 +12,14 @@ service cloud.firestore {
     }
 
     function isAdmin() {
-      return isSignedIn() && request.auth.token.admin == true;
+      return isSignedIn()
+        && ('admin' in request.auth.token)
+        && request.auth.token.admin == true;
     }
 
     function isAuthorityAdmin() {
       return isSignedIn()
+        && ('authority_admin' in request.auth.token)
         && request.auth.token.authority_admin == true
         && exists(/databases/$(database)/documents/professionalAuthorityAdmins/$(request.auth.uid))
         && get(/databases/$(database)/documents/professionalAuthorityAdmins/$(request.auth.uid)).data.isActive == true;
@@ -147,9 +150,17 @@ service cloud.firestore {
         'practisingLicenceYear',
         'licenceRenewalDate',
         'licenceExpiryDate',
-        'licenceSuspensionReason',
-        'isDirectoryVisible'
+        'licenceSuspensionReason'
       ]);
+    }
+
+    function verifiedProfessionalIdentityFieldsUnchanged() {
+      return resource.data.credentialVerificationStatus != 'verified'
+        || (
+          request.resource.data.fullName == resource.data.fullName
+          && request.resource.data.primaryCadre == resource.data.primaryCadre
+          && request.resource.data.registrationNumber == resource.data.registrationNumber
+        );
     }
 
     match /users/{userId} {
@@ -237,6 +248,8 @@ service cloud.firestore {
         ])
         && request.resource.data.keys().hasOnly([
           'userId',
+          'registrationCertificatePath',
+          'practisingCertificatePath',
           'registrationCertificateUrl',
           'practisingCertificateUrl',
           'additionalDocumentUrls',
@@ -253,6 +266,8 @@ service cloud.firestore {
           && request.resource.data.userId == resource.data.userId
           && request.resource.data.submissionStatus == 'pending_review'
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'registrationCertificatePath',
+            'practisingCertificatePath',
             'registrationCertificateUrl',
             'practisingCertificateUrl',
             'additionalDocumentUrls',
@@ -298,7 +313,16 @@ service cloud.firestore {
         && request.auth.uid == userId
         && request.resource.data.isDirectoryVisible == false;
       allow update: if isSignedIn() && (
-        (request.auth.uid == userId && professionalVerificationFieldsUnchanged())
+        (
+          request.auth.uid == userId
+          && professionalVerificationFieldsUnchanged()
+          && verifiedProfessionalIdentityFieldsUnchanged()
+          && request.resource.data.isDirectoryVisible
+            == (
+              get(/databases/$(database)/documents/users/$(userId)).data.isActive == true
+              && request.resource.data.profileCompleteness >= 60
+            )
+        )
         || isAdmin()
         || isAuthorityVerificationProfileUpdate(resource.data.primaryCadre)
         || isAuthorityComplianceProfileUpdate(resource.data.primaryCadre)
