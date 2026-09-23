@@ -23,7 +23,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../lib/utils';
 
 export const Navigation: React.FC = () => {
-  const { user, signOut, loading } = useAuth();
+  const { user, userAccount, signOut, loading } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -35,6 +35,9 @@ export const Navigation: React.FC = () => {
 
   const toggleMenu = () => setIsOpen(!isOpen);
   const toggleUserMenu = () => setIsUserMenuOpen(!isUserMenuOpen);
+  const activeMember = !!userAccount
+    && userAccount.isActive !== false
+    && (!userAccount.accountStatus || userAccount.accountStatus === 'ACTIVE');
 
   useEffect(() => {
     const unsubMaintenance = onSnapshot(doc(db, 'platformConfig', 'settings'), (docSnap) => {
@@ -71,7 +74,12 @@ export const Navigation: React.FC = () => {
     };
     checkPrivilegedClaims();
 
-    // Query for user messages to sum unreadCount
+    if (!activeMember) {
+      setUnreadCount(0);
+      return;
+    }
+
+    // Only active members subscribe to member-network message metadata.
     const messagesQuery = query(
       collection(db, 'messages'),
       where('participants', 'array-contains', user.uid)
@@ -93,7 +101,7 @@ export const Navigation: React.FC = () => {
     return () => {
       unsubscribe();
     };
-  }, [user]);
+  }, [user, activeMember]);
 
   // Handle outside clicks to close user dropdown
   useEffect(() => {
@@ -106,19 +114,24 @@ export const Navigation: React.FC = () => {
     return () => document.removeEventListener('mousedown', handleOutsideClick);
   }, []);
 
-  const navLinks = user 
-    ? [
-        { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-        { name: 'Marketplace', href: '/jobs', icon: Briefcase },
-        { name: 'Professionals', href: '/browse/professionals', icon: UserIcon },
-        { name: 'Organisations', href: '/browse/organisations', icon: Building },
-        { 
-          name: 'Messages', 
-          href: '/messages', 
-          icon: MessageSquare,
-          badge: unreadCount > 0 ? (unreadCount >= 9 ? '9+' : unreadCount.toString()) : undefined
-        },
-      ]
+  const navLinks = user
+    ? activeMember
+      ? [
+          { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
+          { name: 'Marketplace', href: '/jobs', icon: Briefcase },
+          { name: 'Professionals', href: '/browse/professionals', icon: UserIcon },
+          { name: 'Organisations', href: '/browse/organisations', icon: Building },
+          {
+            name: 'Messages',
+            href: '/messages',
+            icon: MessageSquare,
+            badge: unreadCount > 0 ? (unreadCount >= 9 ? '9+' : unreadCount.toString()) : undefined
+          },
+        ]
+      : [
+          { name: 'Account Status', href: '/account-status', icon: ShieldCheck },
+          { name: 'My Profile', href: '/profile', icon: UserIcon },
+        ]
     : [
         { name: 'Home', href: '/' },
         { name: 'Marketplace', href: '#', tooltip: 'Login to browse', grayed: true },
@@ -212,6 +225,17 @@ export const Navigation: React.FC = () => {
                             <p className="text-xs font-semibold text-zinc-700 truncate mt-0.5">{user.email}</p>
                           </div>
 
+                          {!activeMember && (
+                            <Link
+                              to="/account-status"
+                              onClick={() => setIsUserMenuOpen(false)}
+                              className="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-primary hover:bg-primary/5 transition-all"
+                            >
+                              <ShieldCheck size={16} />
+                              Account Status
+                            </Link>
+                          )}
+
                           <Link 
                             to="/profile" 
                             onClick={() => setIsUserMenuOpen(false)}
@@ -221,23 +245,28 @@ export const Navigation: React.FC = () => {
                             My Profile
                           </Link>
 
-                          <Link 
-                            to="/my-postings" 
-                            onClick={() => setIsUserMenuOpen(false)}
-                            className="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-zinc-700 hover:bg-primary/5 hover:text-primary transition-all"
-                          >
-                            <FileText size={16} />
-                            My Postings
-                          </Link>
-
-                          <Link 
-                            to="/my-listings" 
-                            onClick={() => setIsUserMenuOpen(false)}
-                            className="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-zinc-700 hover:bg-primary/5 hover:text-primary transition-all"
-                          >
-                            <Store size={16} />
-                            My Listings
-                          </Link>
+                          {activeMember && (
+                            <>
+                                                        <Link 
+                                                          to="/my-postings" 
+                                                          onClick={() => setIsUserMenuOpen(false)}
+                                                          className="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-zinc-700 hover:bg-primary/5 hover:text-primary transition-all"
+                                                        >
+                                                          <FileText size={16} />
+                                                          My Postings
+                                                        </Link>
+                              
+                                                        <Link 
+                                                          to="/my-listings" 
+                                                          onClick={() => setIsUserMenuOpen(false)}
+                                                          className="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-zinc-700 hover:bg-primary/5 hover:text-primary transition-all"
+                                                        >
+                                                          <Store size={16} />
+                                                          My Listings
+                                                        </Link>
+                              
+                                                          </>
+                          )}
 
                           <Link 
                             to="/settings" 
@@ -300,7 +329,7 @@ export const Navigation: React.FC = () => {
 
           {/* Mobile menu button */}
           <div className="md:hidden flex items-center gap-4">
-            {user && unreadCount > 0 && (
+            {user && activeMember && unreadCount > 0 && (
               <Link to="/messages" className="relative p-2 text-zinc-600 hover:text-primary">
                 <MessageSquare size={24} />
                 <span className="absolute top-1 right-1 bg-green-500 text-white text-[9px] h-4 min-w-4 px-1 rounded-full flex items-center justify-center font-black">
