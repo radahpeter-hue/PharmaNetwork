@@ -18,13 +18,25 @@ service cloud.firestore {
     function isAuthorityAdmin() {
       return isSignedIn()
         && request.auth.token.authority_admin == true
-        && exists(/databases/$(database)/documents/regulatoryBodyAdmins/$(request.auth.uid))
-        && get(/databases/$(database)/documents/regulatoryBodyAdmins/$(request.auth.uid)).data.isActive != false;
+        && exists(/databases/$(database)/documents/professionalAuthorityAdmins/$(request.auth.uid))
+        && get(/databases/$(database)/documents/professionalAuthorityAdmins/$(request.auth.uid)).data.isActive == true;
+    }
+
+    function authorityAdminHasCadre(cadre) {
+      return isAuthorityAdmin()
+        && (cadre in get(/databases/$(database)/documents/professionalAuthorityAdmins/$(request.auth.uid)).data.scopedCadres);
+    }
+
+    function authorityCanAccessProfessional(userId) {
+      return isAuthorityAdmin()
+        && exists(/databases/$(database)/documents/individualProfiles/$(userId))
+        && authorityAdminHasCadre(
+          get(/databases/$(database)/documents/individualProfiles/$(userId)).data.primaryCadre
+        );
     }
 
     function isAdminScopedForProfile(cadre) {
-      return isAuthorityAdmin()
-        && (cadre in get(/databases/$(database)/documents/regulatoryBodyAdmins/$(request.auth.uid)).data.scopedCadres)
+      return authorityAdminHasCadre(cadre)
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
           'credentialVerificationStatus',
           'credentialVerifiedAt',
@@ -96,15 +108,28 @@ service cloud.firestore {
       allow read, write: if isAdmin();
     }
 
-    match /regulatoryBodyAdmins/{adminUid} {
-      allow read: if isSignedIn()
-        && (isAdmin() || (request.auth.uid == adminUid && request.auth.token.authority_admin == true));
+    match /professionalAuthorities/{authorityId} {
+      allow read: if isAdmin() || isAuthorityAdmin();
+      allow write: if isAdmin();
+    }
+
+    match /professionalAuthorityAdmins/{adminUid} {
+      allow read: if isAdmin()
+        || (
+          isAuthorityAdmin()
+          && resource.data.authorityId
+            == get(/databases/$(database)/documents/professionalAuthorityAdmins/$(request.auth.uid)).data.authorityId
+        );
       allow write: if isAdmin();
     }
 
     match /verificationDocuments/{userId} {
       allow read: if isSignedIn()
-        && (request.auth.uid == userId || isAdmin() || isAuthorityAdmin());
+        && (
+          request.auth.uid == userId
+          || isAdmin()
+          || authorityCanAccessProfessional(userId)
+        );
 
       allow create: if isSignedIn()
         && request.auth.uid == userId
@@ -145,7 +170,7 @@ service cloud.firestore {
           ])
         )
         || (
-          (isAdmin() || isAuthorityAdmin())
+          (isAdmin() || authorityCanAccessProfessional(userId))
           && request.resource.data.userId == resource.data.userId
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
             'reviewedAt',
@@ -165,7 +190,7 @@ service cloud.firestore {
         request.auth.uid == userId
         || isActiveMember()
         || isAdmin()
-        || isAuthorityAdmin()
+        || authorityAdminHasCadre(resource.data.primaryCadre)
       );
       allow create: if isSignedIn() && request.auth.uid == userId;
       allow update: if isSignedIn() && (
@@ -181,7 +206,6 @@ service cloud.firestore {
         request.auth.uid == userId
         || isActiveMember()
         || isAdmin()
-        || isAuthorityAdmin()
       );
       allow create, update: if isSignedIn() && request.auth.uid == userId;
       allow delete: if isAdmin();
@@ -189,7 +213,7 @@ service cloud.firestore {
     }
 
     match /jobPostings/{jobId} {
-      allow read: if isActiveMember() || isAdmin() || isAuthorityAdmin();
+      allow read: if isActiveMember() || isAdmin();
       allow create: if isActiveMember()
         && request.resource.data.organisationUserId == request.auth.uid
         && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.accountType == 'organisation';
@@ -208,7 +232,7 @@ service cloud.firestore {
     }
 
     match /availabilityPosts/{postId} {
-      allow read: if isActiveMember() || isAdmin() || isAuthorityAdmin();
+      allow read: if isActiveMember() || isAdmin();
       allow create: if isActiveMember()
         && request.resource.data.individualUserId == request.auth.uid
         && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.accountType == 'individual';
