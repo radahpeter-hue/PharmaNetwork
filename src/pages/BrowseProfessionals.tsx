@@ -233,28 +233,74 @@ const BrowseProfessionals: React.FC = () => {
         )}
       </div>
 
+      <div className="lg:hidden mb-6 space-y-3">
+        <div className="relative">
+          <input
+            type="text"
+            placeholder="Search professionals by name or profile details..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full bg-white border border-zinc-200 rounded-2xl pl-11 pr-4 py-3.5 text-sm font-semibold text-zinc-700 outline-none focus:ring-2 focus:ring-primary/20"
+          />
+          <Search className="absolute left-4 top-4 text-zinc-400" size={17} />
+        </div>
+        <button
+          type="button"
+          onClick={() => setShowMobileFilters(true)}
+          className="w-full flex items-center justify-center gap-2 rounded-2xl border border-zinc-200 bg-white py-3 text-sm font-bold text-zinc-700"
+        >
+          <Filter size={16} />
+          Filters{activeFilterCount > 0 ? ` (${activeFilterCount} active)` : ''}
+        </button>
+      </div>
+
+      {showMobileFilters && (
+        <button
+          type="button"
+          aria-label="Close filters"
+          onClick={() => setShowMobileFilters(false)}
+          className="fixed inset-0 z-40 bg-black/40 lg:hidden"
+        />
+      )}
+
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-12 items-start">
         {/* Filter Sidebar */}
-        <div className="lg:col-span-1 space-y-8 bg-white p-6 rounded-3xl border border-zinc-150 shadow-sm sticky top-24">
+        <div className={cn(
+          "space-y-8 bg-white p-6 rounded-3xl border border-zinc-150 shadow-sm",
+          showMobileFilters
+            ? "fixed left-4 right-4 bottom-4 z-50 max-h-[80vh] overflow-y-auto lg:static lg:max-h-none"
+            : "hidden lg:block",
+          "lg:col-span-1 lg:sticky lg:top-24"
+        )}>
           <div className="flex items-center justify-between border-b border-zinc-100 pb-3 mb-2">
             <h3 className="font-extrabold text-zinc-900 flex items-center gap-2 text-sm uppercase tracking-wide">
               <Filter size={16} />
               Refine Search
             </h3>
-            {hasActiveFilters && (
-              <button 
-                onClick={handleClearFilters}
-                className="text-[10px] font-black uppercase text-amber-600 hover:text-amber-700 transition-colors flex items-center gap-1"
+            <div className="flex items-center gap-2">
+              {hasActiveFilters && (
+                <button
+                  onClick={handleClearFilters}
+                  className="text-[10px] font-black uppercase text-amber-600 hover:text-amber-700 transition-colors flex items-center gap-1"
+                >
+                  Clear
+                  <X size={12} />
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => setShowMobileFilters(false)}
+                className="lg:hidden p-1.5 rounded-lg text-zinc-500 hover:bg-zinc-100"
+                aria-label="Close filters"
               >
-                Clear
-                <X size={12} />
+                <X size={16} />
               </button>
-            )}
+            </div>
           </div>
 
           <div className="space-y-5">
             {/* Search Input */}
-            <div>
+            <div className="hidden lg:block">
               <label className="block text-[10px] font-black text-zinc-400 uppercase tracking-widest mb-1.5">Free Search</label>
               <div className="relative">
                 <input
@@ -363,7 +409,7 @@ const BrowseProfessionals: React.FC = () => {
         <div className="lg:col-span-3 space-y-6">
           <div className="flex items-center gap-4 text-sm text-zinc-500 font-medium">
             <span className="bg-primary/5 text-primary-light ring-1 ring-primary/10 px-3 py-1 rounded-full text-xs font-bold">
-              Found {filteredProfessionals.length} Professionals
+              Showing {Math.min(visibleCount, filteredProfessionals.length)} of {filteredProfessionals.length} Professionals
             </span>
           </div>
 
@@ -384,9 +430,9 @@ const BrowseProfessionals: React.FC = () => {
               )}
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
               <AnimatePresence mode="popLayout">
-                {filteredProfessionals.map((prof) => (
+                {visibleProfessionals.map((prof) => (
                   <motion.div
                     key={prof.id}
                     layout
@@ -435,14 +481,26 @@ const BrowseProfessionals: React.FC = () => {
                       <div className="flex flex-wrap gap-2 mb-4">
                         {prof.primaryCadre && (
                           <span className="bg-primary/5 text-primary-light text-[10px] font-extrabold px-2.5 py-1 rounded-lg border border-primary/10 uppercase">
-                            {prof.primaryCadre.replace(/_/g, ' ')}
+                            {cadreLabel(prof.primaryCadre)}
                           </span>
                         )}
                         {prof.yearsExperience ? (
                           <span className="bg-zinc-50 text-zinc-650 text-[10px] font-bold px-2.5 py-1 rounded-lg border border-zinc-205">
-                            {prof.yearsExperience} Years Exp
+                            {experienceLabel(prof.yearsExperience)}
                           </span>
                         ) : null}
+                        {prof.availabilityStatus && (
+                          <span className={cn(
+                            "text-[10px] font-black px-2.5 py-1 rounded-lg border",
+                            prof.availabilityStatus === 'actively_seeking'
+                              ? "bg-emerald-50 text-emerald-700 border-emerald-100"
+                              : prof.availabilityStatus === 'open_to_offers'
+                                ? "bg-amber-50 text-amber-700 border-amber-100"
+                                : "bg-zinc-100 text-zinc-500 border-zinc-200"
+                          )}>
+                            {availabilityLabel(prof.availabilityStatus)}
+                          </span>
+                        )}
                       </div>
 
                       {prof.bio ? (
@@ -457,9 +515,8 @@ const BrowseProfessionals: React.FC = () => {
                     </div>
 
                     <div className="flex items-center justify-between pt-5 border-t border-zinc-50 mt-auto">
-                      <div className="text-xs text-zinc-400 flex items-center gap-1 font-bold">
-                        <Eye size={12} className="text-zinc-300" />
-                        <span>{prof.totalProfileViews || 0} views</span>
+                      <div className="text-[10px] text-zinc-400 font-bold">
+                        {prof.registrationNumber ? `Reg. No. ${prof.registrationNumber}` : 'Professional profile'}
                       </div>
 
                       <div className="flex items-center gap-2">
@@ -483,6 +540,17 @@ const BrowseProfessionals: React.FC = () => {
                   </motion.div>
                 ))}
               </AnimatePresence>
+            </div>
+          )}
+
+          {!loading && visibleCount < filteredProfessionals.length && (
+            <div className="flex justify-center pt-2">
+              <Button
+                variant="outline"
+                onClick={() => setVisibleCount(count => count + 20)}
+              >
+                Load more
+              </Button>
             </div>
           )}
         </div>
