@@ -8,6 +8,7 @@ import Login from './pages/Login';
 import Register from './pages/Register';
 import Dashboard from './pages/Dashboard';
 import Profile from './pages/Profile';
+import EditProfessionalProfile from './pages/EditProfessionalProfile';
 import JobBoard from './pages/JobBoard';
 import CreateJobPosting from './pages/CreateJobPosting';
 import JobPostingDetail from './pages/JobPostingDetail';
@@ -129,6 +130,14 @@ function App() {
                 element={
                   <AuthenticatedRoute>
                     <Profile />
+                  </AuthenticatedRoute>
+                }
+              />
+              <Route
+                path="/profile/edit"
+                element={
+                  <AuthenticatedRoute>
+                    <EditProfessionalProfile />
                   </AuthenticatedRoute>
                 }
               />
