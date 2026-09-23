@@ -37,6 +37,19 @@ export const PROFESSIONAL_CADRES: Array<{ id: PrimaryCadre; label: string }> = [
 
 export const PHARMA_CADRES = PROFESSIONAL_CADRES.map(cadre => cadre.label);
 
+export const professionalCadreLabel = (cadre?: string) =>
+  PROFESSIONAL_CADRES.find(option => option.id === cadre)?.label
+  || PROFESSIONAL_CADRES.find(option => option.label === cadre)?.label
+  || (cadre || 'Professional').replace(/_/g, ' ');
+
+export const normalizeProfessionalCadreId = (cadre?: string): string => {
+  if (!cadre) return '';
+  const byId = PROFESSIONAL_CADRES.find(option => option.id === cadre);
+  if (byId) return byId.id;
+  const byLabel = PROFESSIONAL_CADRES.find(option => option.label === cadre);
+  return byLabel?.id || cadre;
+};
+
 export const EMPLOYMENT_TYPES = [
   { id: 'full_time', label: 'Full-time' },
   { id: 'part_time', label: 'Part-time' },
