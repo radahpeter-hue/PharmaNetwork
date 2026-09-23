@@ -448,13 +448,48 @@ service cloud.firestore {
 
     match /businessListings/{listingId} {
       allow read: if isActiveMember() || isAdmin();
-      allow create: if isActiveMember() && request.resource.data.sellerUserId == request.auth.uid;
+      allow create: if isActiveMember()
+        && request.resource.data.sellerUserId == request.auth.uid
+        && request.resource.data.photoUrls is list
+        && request.resource.data.photoUrls.size() <= 3;
+      allow update: if isAdmin()
+        || (
+          isActiveMember()
+          && resource.data.sellerUserId == request.auth.uid
+          && request.resource.data.sellerUserId == resource.data.sellerUserId
+          && request.resource.data.photoUrls is list
+          && request.resource.data.photoUrls.size() <= 3
+        );
+      allow delete: if isAdmin()
+        || (
+          isActiveMember()
+          && resource.data.sellerUserId == request.auth.uid
+        );
+    }
+
+    match /businessListingPrivate/{listingId} {
+      allow read: if isAdmin()
+        || (
+          isActiveMember()
+          && resource.data.sellerUserId == request.auth.uid
+        )
+        || (
+          isActiveMember()
+          && exists(/databases/$(database)/documents/businessListings/$(listingId))
+          && get(/databases/$(database)/documents/businessListings/$(listingId)).data.isConfidential == false
+          && get(/databases/$(database)/documents/businessListings/$(listingId)).data.status == 'active'
+        );
+
+      allow create: if isActiveMember()
+        && request.resource.data.sellerUserId == request.auth.uid;
+
       allow update: if isAdmin()
         || (
           isActiveMember()
           && resource.data.sellerUserId == request.auth.uid
           && request.resource.data.sellerUserId == resource.data.sellerUserId
         );
+
       allow delete: if isAdmin()
         || (
           isActiveMember()
