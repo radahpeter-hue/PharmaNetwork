@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { auth, db } from '../lib/firebase';
 import { onAuthStateChanged, User, signOut as firebaseSignOut } from 'firebase/auth';
-import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
+import { doc, getDoc } from 'firebase/firestore';
 import { IndividualProfile, OrganisationProfile, UserAccount } from '../types';
 
 interface AuthContextType {
@@ -40,30 +40,39 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // 1. Fetch user account
       const accountDoc = await getDoc(doc(db, 'users', userId));
       
-      if (accountDoc.exists()) {
-        const accountData = accountDoc.data() as UserAccount;
-        
-        if (accountData.isActive === false) {
-          console.warn("User account is deactivated. Terminating session...");
-          await firebaseSignOut(auth);
-          setUserAccount(null);
-          setProfile(null);
-          setUser(null);
-          return;
-        }
+      if (!accountDoc.exists()) {
+        console.warn('Authenticated user has no PharmaNetwork account record. Terminating session.');
+        await firebaseSignOut(auth);
+        setUserAccount(null);
+        setProfile(null);
+        setUser(null);
+        return;
+      }
 
-        setUserAccount(accountData);
+      const accountData = accountDoc.data() as UserAccount;
 
-        // 2. Fetch profile - doc ID == userId
-        const profileCollection = accountData.accountType === 'individual' 
-          ? 'individualProfiles' 
-          : 'organisationProfiles';
-        
-        const profileDoc = await getDoc(doc(db, profileCollection, userId));
-        
-        if (profileDoc.exists()) {
-          setProfile(profileDoc.data() as IndividualProfile | OrganisationProfile);
-        }
+      if (accountData.isActive === false) {
+        console.warn('User account is deactivated. Terminating session.');
+        await firebaseSignOut(auth);
+        setUserAccount(null);
+        setProfile(null);
+        setUser(null);
+        return;
+      }
+
+      setUserAccount(accountData);
+
+      // 2. Fetch profile - doc ID == userId
+      const profileCollection = accountData.accountType === 'individual'
+        ? 'individualProfiles'
+        : 'organisationProfiles';
+
+      const profileDoc = await getDoc(doc(db, profileCollection, userId));
+
+      if (profileDoc.exists()) {
+        setProfile(profileDoc.data() as IndividualProfile | OrganisationProfile);
+      } else {
+        setProfile(null);
       }
     } catch (error) {
       console.error('Error fetching user data from Firebase:', error);
