@@ -16,7 +16,7 @@ const WHAT_IS_INCLUDED_OPTIONS = [
   { id: 'pharmacy_software', label: 'Pharmacy Software System' },
   { id: 'supplier_relationships', label: 'Supplier / Distributor Contracts' },
   { id: 'client_base', label: 'Established Client / Patient Base' },
-  { id: 'nda_licence', label: 'NDA Licence / Approvals' },
+  { id: 'nda_licence', label: 'Regulatory Licence / Approvals' },
   { id: 'lease_agreement', label: 'Premises Lease Agreement' },
   { id: 'staff', label: 'Trained staff willing to stay' }
 ];
@@ -224,9 +224,9 @@ export const CreateBusinessListing: React.FC = () => {
         <div className="w-16 h-16 bg-amber-50 rounded-2xl flex items-center justify-center text-amber-500 mx-auto mb-4 border border-amber-200">
           <Store size={32} />
         </div>
-        <h1 className="text-3xl font-black text-zinc-900 tracking-tight">Sell Your Pharmacy Business</h1>
+        <h1 className="text-3xl font-black text-zinc-900 tracking-tight">List a Healthcare or Pharmaceutical Business</h1>
         <p className="text-zinc-500 mt-2 max-w-lg mx-auto text-sm">
-          Connect with qualified, licensed pharmacists and corporate networks in Uganda. List confidentially or publicly.
+          Connect with active PharmaNetwork members while choosing whether sensitive seller details remain confidential.
         </p>
       </div>
 
@@ -270,10 +270,10 @@ export const CreateBusinessListing: React.FC = () => {
               <div>
                 <label htmlFor="isConfidential" className="font-bold text-sm text-zinc-900 flex items-center gap-1 cursor-pointer">
                   <EyeOff size={16} className="text-amber-500" />
-                  CONFIDENTIAL LISTING (Highly Recommended)
+                  CONFIDENTIAL LISTING
                 </label>
                 <p className="text-xs text-zinc-500 mt-1 leading-relaxed">
-                  Protect patients, suppliers and staff. If checked, the public can only view general details, sales bands and district name. Photo gallery, exact block locations, licenses, and specific brand names remain entirely hidden until a confidentiality request or secure platform chat is initiated.
+                  If checked, other members can view only the general listing details. Seller contact details, exact location, licence details and private photos remain protected; interested members can contact you through platform messaging.
                 </p>
               </div>
             </div>
@@ -360,16 +360,16 @@ export const CreateBusinessListing: React.FC = () => {
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-zinc-400 uppercase tracking-widest mb-1">NDA Licencing Status</label>
+              <label className="block text-xs font-bold text-zinc-400 uppercase tracking-widest mb-1">Licence / Approval Status</label>
               <select
                 name="ndaLicenceStatus"
                 value={formData.ndaLicenceStatus}
                 onChange={handleInputChange}
                 className="w-full bg-zinc-50 border-none rounded-xl px-4 py-3.5 text-sm font-bold text-zinc-750 outline-none focus:ring-2 focus:ring-amber-500/20"
               >
-                <option value="licensed_current">Current NDA Licensed</option>
-                <option value="licence_expired">License Needs Renewal</option>
-                <option value="no_licence_equipment_only">No Active License (Selling assets only)</option>
+                <option value="licensed_current">Current / Valid</option>
+                <option value="licence_expired">Renewal Required</option>
+                <option value="no_licence_equipment_only">No Current Licence / Assets Only</option>
               </select>
             </div>
           </div>
@@ -567,7 +567,7 @@ export const CreateBusinessListing: React.FC = () => {
             </div>
           </div>
           <p className="text-[10px] text-zinc-400 font-bold bg-zinc-50 p-4 rounded-xl border border-dashed border-zinc-100">
-            For Confidential listings: Guest users can NOT view these details. Logged-in verified pharmacists can reach out directly via our real-time messenger in complete privacy.
+            For confidential listings, these contact details are protected from other members. Interested members can reach out through platform messaging directly via our real-time messenger in complete privacy.
           </p>
         </div>
 
