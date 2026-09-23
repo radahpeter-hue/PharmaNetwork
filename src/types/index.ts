@@ -209,9 +209,9 @@ export interface BusinessListing {
   listingTitle: string;
   businessType: 'retail_pharmacy' | 'wholesale_pharmacy' | 'drug_shop' | 'distribution_company' | 'manufacturing_facility' | 'pharmaceutical_equipment' | 'other';
   district: string;
-  locationDescription: string;
+  locationDescription?: string;
   yearsInOperation: number;
-  ndaLicenceStatus: 'licensed_current' | 'licence_expired' | 'no_licence_equipment_only';
+  ndaLicenceStatus?: 'licensed_current' | 'licence_expired' | 'no_licence_equipment_only';
   staffCount: number;
   businessDescription: string;
   askingPriceUGX: number | null;
@@ -219,8 +219,8 @@ export interface BusinessListing {
   monthlySalesRange: 'below_5m' | '5m_to_15m' | '15m_to_30m' | '30m_to_50m' | 'above_50m' | 'prefer_not_to_say';
   reasonForSale: 'retirement' | 'relocation' | 'restructuring' | 'health_reasons' | 'other' | 'prefer_not_to_say';
   whatsIncluded: string[];
-  contactMethod: 'whatsapp' | 'email';
-  contactDetail: string;
+  contactMethod?: 'whatsapp' | 'email';
+  contactDetail?: string;
   contactName?: string;
   photoUrls: string[];
   status: 'active' | 'under_offer' | 'sold' | 'withdrawn';
