@@ -95,6 +95,11 @@ export const BodyAdminConsole: React.FC = () => {
   const [bulkTargetStatus, setBulkTargetStatus] = useState<string>('not_renewed');
   const [bulkConfirmChecked, setBulkConfirmChecked] = useState(false);
 
+  const canVerify = !!adminProfile
+    && ['authority_super_admin', 'verification_officer'].includes(adminProfile.role);
+  const canManageCompliance = !!adminProfile
+    && ['authority_super_admin', 'compliance_officer'].includes(adminProfile.role);
+
   // Verify and fetch professional-authority administrative data.
   // Authority accounts must be provisioned through trusted backend processes.
   useEffect(() => {
@@ -199,114 +204,165 @@ export const BodyAdminConsole: React.FC = () => {
     }
   };
 
-  // Quick Action Handler - Verification approvals
+  // Verification actions are restricted to authority super admins and verification officers.
   const handleApprove = async (profileId: string) => {
-    if (!adminProfile) return;
+    if (!adminProfile || !canVerify) return;
+
     setSavingAction(true);
     try {
+      const batch = writeBatch(db);
       const pRef = doc(db, 'individualProfiles', profileId);
-      await updateDoc(pRef, {
+      const userRef = doc(db, 'users', profileId);
+      const vdRef = doc(db, 'verificationDocuments', profileId);
+
+      batch.update(pRef, {
         credentialVerificationStatus: 'verified',
         credentialVerifiedAt: serverTimestamp(),
         credentialVerifiedByBody: adminProfile.authorityName,
         credentialVerifiedByUid: adminProfile.uid,
         credentialRejectionReason: '',
-        practisingLicenceStatus: 'not_renewed', // Start-state is registered, needs licence updated next.
         updatedAt: serverTimestamp()
       });
 
-      // Update local verification doc reviewed tags
-      const vdRef = doc(db, 'verificationDocuments', profileId);
-      await updateDoc(vdRef, {
+      batch.update(userRef, {
+        accountStatus: 'INACTIVE_ANNUAL_COMPLIANCE',
+        isActive: false,
+        isVerified: true,
+        updatedAt: serverTimestamp()
+      });
+
+      batch.update(vdRef, {
         reviewedAt: serverTimestamp(),
         reviewedByUid: adminProfile.uid,
         reviewedByBody: adminProfile.authorityId,
-        reviewNotes: 'Approved during queue validation.'
-      }).catch(e => console.warn("Verification documents update failed:", e));
+        reviewNotes: 'Professional credentials approved. Annual compliance confirmation is still required.',
+        submissionStatus: 'approved'
+      });
 
-      // Refresh data
+      await batch.commit();
       await loadConsoleData();
       setActiveReviewProfile(null);
     } catch (err) {
-      alert("Error approving credential: " + err);
+      alert('Error approving professional credentials: ' + err);
     } finally {
       setSavingAction(false);
     }
   };
 
   const handleReject = async (profileId: string) => {
-    if (!adminProfile || !rejectionReason.trim()) {
-      alert("Please provide an internal or external reason for rejection.");
+    if (!adminProfile || !canVerify || !rejectionReason.trim()) {
+      alert('Please provide a reason for rejection.');
       return;
     }
+
     setSavingAction(true);
     try {
+      const batch = writeBatch(db);
       const pRef = doc(db, 'individualProfiles', profileId);
-      await updateDoc(pRef, {
+      const userRef = doc(db, 'users', profileId);
+      const vdRef = doc(db, 'verificationDocuments', profileId);
+
+      batch.update(pRef, {
         credentialVerificationStatus: 'rejected',
         credentialRejectionReason: rejectionReason,
         updatedAt: serverTimestamp()
       });
 
-      const vdRef = doc(db, 'verificationDocuments', profileId);
-      await updateDoc(vdRef, {
+      batch.update(userRef, {
+        accountStatus: 'REJECTED',
+        isActive: false,
+        isVerified: false,
+        updatedAt: serverTimestamp()
+      });
+
+      batch.update(vdRef, {
         reviewedAt: serverTimestamp(),
         reviewedByUid: adminProfile.uid,
         reviewedByBody: adminProfile.authorityId,
-        reviewNotes: `Rejected: ${rejectionReason}`
-      }).catch(e => console.warn("Verification documents update failed:", e));
+        reviewNotes: `Rejected: ${rejectionReason}`,
+        submissionStatus: 'rejected'
+      });
 
+      await batch.commit();
       await loadConsoleData();
       setShowRejectForm(false);
       setRejectionReason('');
       setActiveReviewProfile(null);
     } catch (err) {
-      alert("Error rejecting credential: " + err);
+      alert('Error rejecting professional credentials: ' + err);
     } finally {
       setSavingAction(false);
     }
   };
 
   const handleRequestMoreInfo = async (profileId: string) => {
-    if (!adminProfile || !requestInfoNotes.trim()) {
-      alert("Please specify what information or file corrections are required.");
+    if (!adminProfile || !canVerify || !requestInfoNotes.trim()) {
+      alert('Please specify what information or corrections are required.');
       return;
     }
+
     setSavingAction(true);
     try {
+      const batch = writeBatch(db);
       const pRef = doc(db, 'individualProfiles', profileId);
-      await updateDoc(pRef, {
+      const userRef = doc(db, 'users', profileId);
+      const vdRef = doc(db, 'verificationDocuments', profileId);
+
+      batch.update(pRef, {
         credentialVerificationStatus: 'unverified',
-        credentialRejectionReason: `More info required: ${requestInfoNotes}`,
+        credentialRejectionReason: `More information required: ${requestInfoNotes}`,
         updatedAt: serverTimestamp()
       });
 
-      const vdRef = doc(db, 'verificationDocuments', profileId);
-      await updateDoc(vdRef, {
+      batch.update(userRef, {
+        accountStatus: 'MORE_INFORMATION_REQUIRED',
+        isActive: false,
+        isVerified: false,
+        updatedAt: serverTimestamp()
+      });
+
+      batch.update(vdRef, {
         reviewedAt: serverTimestamp(),
         reviewedByUid: adminProfile.uid,
         reviewedByBody: adminProfile.authorityId,
-        reviewNotes: `More Info Requested: ${requestInfoNotes}`
-      }).catch(e => console.warn("Verification documents update failed:", e));
+        reviewNotes: `More information required: ${requestInfoNotes}`,
+        submissionStatus: 'more_information_required'
+      });
 
+      await batch.commit();
       await loadConsoleData();
       setShowRequestInfoForm(false);
       setRequestInfoNotes('');
       setActiveReviewProfile(null);
     } catch (err) {
-      alert("Error requesting more information: " + err);
+      alert('Error requesting more information: ' + err);
     } finally {
       setSavingAction(false);
     }
   };
 
-  // Individual Licence Status Save
+  const accountStateForLicence = (status: string) => {
+    if (status === 'renewed_current') {
+      return { accountStatus: 'ACTIVE', isActive: true };
+    }
+    if (status === 'suspended') {
+      return { accountStatus: 'SUSPENDED_BY_AUTHORITY', isActive: false };
+    }
+    return { accountStatus: 'INACTIVE_ANNUAL_COMPLIANCE', isActive: false };
+  };
+
+  // Annual compliance actions are restricted to authority super admins and compliance officers.
   const handleSaveIndividualLicence = async () => {
-    if (!activeUpdateLicenceProfile) return;
+    if (!activeUpdateLicenceProfile || !canManageCompliance) return;
+
     setSavingAction(true);
     try {
+      const nextAccountState = accountStateForLicence(editLicenceStatus);
+      const batch = writeBatch(db);
       const pRef = doc(db, 'individualProfiles', activeUpdateLicenceProfile.id);
-      await updateDoc(pRef, {
+      const userRef = doc(db, 'users', activeUpdateLicenceProfile.id);
+
+      batch.update(pRef, {
         practisingLicenceStatus: editLicenceStatus,
         practisingLicenceYear: Number(editLicenceYear),
         licenceRenewalDate: Timestamp.fromDate(new Date(editRenewalDate)),
@@ -315,31 +371,47 @@ export const BodyAdminConsole: React.FC = () => {
         updatedAt: serverTimestamp()
       });
 
+      batch.update(userRef, {
+        accountStatus: nextAccountState.accountStatus,
+        isActive: nextAccountState.isActive,
+        isVerified: true,
+        updatedAt: serverTimestamp()
+      });
+
+      await batch.commit();
       await loadConsoleData();
       setActiveUpdateLicenceProfile(null);
     } catch (err) {
-      alert("Error updating licence status: " + err);
+      alert('Error updating annual professional compliance: ' + err);
     } finally {
       setSavingAction(false);
     }
   };
 
-  // Bulk update action
   const handleBulkUpdate = async () => {
+    if (!canManageCompliance) return;
+
     if (selectedProfileIds.length === 0 || !bulkConfirmChecked) {
-      alert("Please select profiles and check the confirmation box.");
+      alert('Please select professionals and confirm the bulk update.');
       return;
     }
 
     setSavingAction(true);
     try {
+      const nextAccountState = accountStateForLicence(bulkTargetStatus);
       const batch = writeBatch(db);
-      
+
       selectedProfileIds.forEach(id => {
-        const pRef = doc(db, 'individualProfiles', id);
-        batch.update(pRef, {
+        batch.update(doc(db, 'individualProfiles', id), {
           practisingLicenceStatus: bulkTargetStatus,
           practisingLicenceYear: new Date().getFullYear(),
+          updatedAt: serverTimestamp()
+        });
+
+        batch.update(doc(db, 'users', id), {
+          accountStatus: nextAccountState.accountStatus,
+          isActive: nextAccountState.isActive,
+          isVerified: true,
           updatedAt: serverTimestamp()
         });
       });
@@ -349,9 +421,9 @@ export const BodyAdminConsole: React.FC = () => {
       setSelectedProfileIds([]);
       setBulkConfirmChecked(false);
       setShowBulkModal(false);
-      alert(`Licence Status successfully updated to "${bulkTargetStatus.replace('_', ' ')}" for ${selectedProfileIds.length} professionals.`);
+      alert(`Annual compliance status updated for ${selectedProfileIds.length} professionals.`);
     } catch (err) {
-      alert("Bulk update operation failed: " + err);
+      alert('Bulk annual-compliance update failed: ' + err);
     } finally {
       setSavingAction(false);
     }
@@ -506,7 +578,7 @@ export const BodyAdminConsole: React.FC = () => {
             >
               <div className="flex items-center gap-3">
                 <Sliders size={18} />
-                <span>Licence Management</span>
+                <span>Annual Compliance</span>
               </div>
             </button>
 
@@ -595,7 +667,7 @@ export const BodyAdminConsole: React.FC = () => {
 
                               <div className="space-y-2 mt-4 bg-zinc-50 p-3 rounded-xl border border-zinc-100 text-xs">
                                 <div className="flex justify-between">
-                                  <span className="text-zinc-500 font-medium">Decl. License:</span>
+                                  <span className="text-zinc-500 font-medium">Decl. Compliance:</span>
                                   <span className="font-mono font-bold text-zinc-700">{p.registrationNumber || 'Not provided'}</span>
                                 </div>
                                 <div className="flex justify-between">
@@ -851,7 +923,7 @@ export const BodyAdminConsole: React.FC = () => {
                               <th className="py-4 px-5">Supervised Cadre</th>
                               <th className="py-4 px-5">District</th>
                               <th className="py-4 px-5">Verification</th>
-                              <th className="py-4 px-5">License Stamp</th>
+                              <th className="py-4 px-5">Compliance Stamp</th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-zinc-100 font-semibold text-zinc-700">
@@ -1231,7 +1303,7 @@ export const BodyAdminConsole: React.FC = () => {
                   <div className="flex flex-wrap items-center justify-between gap-4">
                     <button
                       onClick={() => handleApprove(activeReviewProfile.id)}
-                      disabled={savingAction}
+                      disabled={savingAction || !canVerify}
                       className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold py-3 px-6 rounded-2xl flex items-center gap-2 shadow-sm cursor-pointer"
                     >
                       <CheckCircle size={16} />
@@ -1240,6 +1312,7 @@ export const BodyAdminConsole: React.FC = () => {
 
                     <div className="flex gap-3">
                       <button
+                        disabled={!canVerify}
                         onClick={() => {
                           setShowRequestInfoForm(true);
                           setShowRejectForm(false);
@@ -1249,6 +1322,7 @@ export const BodyAdminConsole: React.FC = () => {
                         Request More Info
                       </button>
                       <button
+                        disabled={!canVerify}
                         onClick={() => {
                           setShowRejectForm(true);
                           setShowRequestInfoForm(false);
@@ -1283,7 +1357,7 @@ export const BodyAdminConsole: React.FC = () => {
               className="bg-white rounded-3xl overflow-hidden max-w-md w-full shadow-2xl border border-zinc-200"
             >
               <div className="bg-[#1A237E] text-white p-4 px-6 flex justify-between items-center">
-                <h3 className="font-extrabold text-sm">Update Practice Permit Licence</h3>
+                <h3 className="font-extrabold text-sm">Update Annual Compliance</h3>
                 <button 
                   onClick={() => setActiveUpdateLicenceProfile(null)}
                   className="text-white bg-white/10 p-1 px-2.5 rounded-lg text-xs cursor-pointer"
@@ -1302,7 +1376,7 @@ export const BodyAdminConsole: React.FC = () => {
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-zinc-700">Licence Permit Status</label>
+                  <label className="text-xs font-bold text-zinc-700">Professional Standing Status</label>
                   <select
                     value={editLicenceStatus}
                     onChange={(e: any) => setEditLicenceStatus(e.target.value)}
@@ -1374,11 +1448,11 @@ export const BodyAdminConsole: React.FC = () => {
                   Cancel
                 </button>
                 <button
-                  disabled={savingAction || (editLicenceStatus === 'suspended' && !editSuspensionReason.trim())}
+                  disabled={!canManageCompliance || savingAction || (editLicenceStatus === 'suspended' && !editSuspensionReason.trim())}
                   onClick={handleSaveIndividualLicence}
                   className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black uppercase tracking-wider py-2 px-5 rounded-xl transition-all shadow-sm cursor-pointer"
                 >
-                  Save Licence Status
+                  Save Compliance Status
                 </button>
               </div>
             </motion.div>
@@ -1402,7 +1476,7 @@ export const BodyAdminConsole: React.FC = () => {
               className="bg-white rounded-3xl overflow-hidden max-w-md w-full shadow-2xl border border-zinc-200"
             >
               <div className="bg-[#1A237E] text-white p-4 px-6 flex justify-between items-center">
-                <h3 className="font-extrabold text-sm">Bulk Update Licenses</h3>
+                <h3 className="font-extrabold text-sm">Bulk Update Compliance</h3>
                 <button 
                   onClick={() => setShowBulkModal(false)}
                   className="text-white bg-white/10 p-1 px-2.5 rounded-lg text-xs"
@@ -1420,7 +1494,7 @@ export const BodyAdminConsole: React.FC = () => {
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-zinc-700">Target Licence Status To Apply</label>
+                  <label className="text-xs font-bold text-zinc-700">Target Compliance Status</label>
                   <select
                     value={bulkTargetStatus}
                     onChange={(e) => setBulkTargetStatus(e.target.value)}
@@ -1441,7 +1515,7 @@ export const BodyAdminConsole: React.FC = () => {
                     className="mt-0.5 h-4 w-4 bg-zinc-50 border border-zinc-300 rounded focus:ring-primary"
                   />
                   <label htmlFor="bulkConfirm" className="text-xs font-bold text-zinc-700 leading-tight">
-                    I confirm I want to update licence status for {selectedProfileIds.length} professionals.
+                    I confirm I want to update compliance status for {selectedProfileIds.length} professionals.
                   </label>
                 </div>
               </div>
@@ -1454,7 +1528,7 @@ export const BodyAdminConsole: React.FC = () => {
                   Cancel
                 </button>
                 <button
-                  disabled={savingAction || !bulkConfirmChecked}
+                  disabled={!canManageCompliance || savingAction || !bulkConfirmChecked}
                   onClick={handleBulkUpdate}
                   className={`text-xs font-black uppercase tracking-wider py-2 px-5 rounded-xl transition-all shadow-sm cursor-pointer ${
                     bulkConfirmChecked 
