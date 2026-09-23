@@ -124,6 +124,29 @@ service firebase.storage {
       );
     }
 
+    match /businessPhotos/{userId}/{listingId}/{fileName} {
+      allow read: if isSignedIn() && (
+        request.auth.uid == userId
+        || isPlatformAdmin()
+        || (
+          isActiveMember()
+          && firestore.exists(/databases/(default)/documents/businessListings/$(listingId))
+          && firestore.get(/databases/(default)/documents/businessListings/$(listingId)).data.sellerUserId == userId
+          && firestore.get(/databases/(default)/documents/businessListings/$(listingId)).data.isConfidential == false
+          && firestore.get(/databases/(default)/documents/businessListings/$(listingId)).data.status == 'active'
+        )
+      );
+
+      allow create, update: if isActiveMember()
+        && request.auth.uid == userId
+        && isImageUpload(5 * 1024 * 1024);
+
+      allow delete: if isSignedIn() && (
+        request.auth.uid == userId
+        || isPlatformAdmin()
+      );
+    }
+
     match /verificationDocs/{userId}/{fileName} {
       allow read: if isSignedIn() && (
         request.auth.uid == userId
