@@ -162,7 +162,7 @@ export interface JobPosting {
   organisationDistrict: string;
   organisationLogoUrl: string;
   title: string;
-  cadreRequired: string;
+  cadreRequired: PrimaryCadre | string;
   district: string;
   employmentType: string;
   description: string;
@@ -179,7 +179,7 @@ export interface AvailabilityPost {
   id?: string;
   individualUserId: string;
   fullName: string;
-  primaryCadre: string;
+  primaryCadre: PrimaryCadre | string;
   district: string;
   profilePhotoUrl: string;
   registrationNumber: string;
