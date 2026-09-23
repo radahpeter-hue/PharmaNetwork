@@ -64,83 +64,35 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) =
 };
 
 const AdminProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { user, loading } = useAuth();
-  const [isAdmin, setIsAdmin] = React.useState<boolean | null>(null);
+  const { user, userAccount, isPlatformAdmin, loading } = useAuth();
 
-  React.useEffect(() => {
-    let active = true;
-
-    const checkAdminStatus = async () => {
-      if (loading) return;
-      if (!user) {
-        if (active) setIsAdmin(false);
-        return;
-      }
-
-      try {
-        const idTokenResult = await user.getIdTokenResult();
-        if (active) setIsAdmin(idTokenResult.claims.admin === true);
-      } catch (err) {
-        console.error('Admin claim check failed:', err);
-        if (active) setIsAdmin(false);
-      }
-    };
-
-    checkAdminStatus();
-    return () => {
-      active = false;
-    };
-  }, [user, loading]);
-
-  if (loading || isAdmin === null) return (
+  if (loading) return (
     <div className="min-h-screen bg-zinc-50 flex items-center justify-center">
       <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
     </div>
   );
 
   if (!user) return <Navigate to="/login" state={{ from: window.location.pathname }} />;
-  if (!isAdmin) return <Navigate to="/dashboard" />;
+  if (!isPlatformAdmin) {
+    return <Navigate to={userAccount ? '/dashboard' : '/login'} replace />;
+  }
 
   return <>{children}</>;
 };
 
-const BodyAdminProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { user, loading } = useAuth();
-  const [isBodyAdmin, setIsBodyAdmin] = React.useState<boolean | null>(null);
+const AuthorityAdminProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { user, userAccount, isAuthorityAdmin, loading } = useAuth();
 
-  React.useEffect(() => {
-    let active = true;
-
-    const checkStatus = async () => {
-      if (loading) return;
-      if (!user) {
-        if (active) setIsBodyAdmin(false);
-        return;
-      }
-
-      try {
-        const idTokenResult = await user.getIdTokenResult();
-        if (active) setIsBodyAdmin(idTokenResult.claims.body_admin === true);
-      } catch (err) {
-        console.error('Professional authority claim check failed:', err);
-        if (active) setIsBodyAdmin(false);
-      }
-    };
-
-    checkStatus();
-    return () => {
-      active = false;
-    };
-  }, [user, loading]);
-
-  if (loading || isBodyAdmin === null) return (
+  if (loading) return (
     <div className="min-h-screen bg-zinc-50 flex items-center justify-center">
       <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#1A237E]"></div>
     </div>
   );
 
   if (!user) return <Navigate to="/login" state={{ from: window.location.pathname }} />;
-  if (!isBodyAdmin) return <Navigate to="/dashboard" />;
+  if (!isAuthorityAdmin) {
+    return <Navigate to={userAccount ? '/dashboard' : '/login'} replace />;
+  }
 
   return <>{children}</>;
 };
@@ -284,14 +236,15 @@ function App() {
                   </AdminProtectedRoute>
                 } 
               />
-              <Route 
-                path="/body-admin" 
+              <Route
+                path="/authority-admin"
                 element={
-                  <BodyAdminProtectedRoute>
+                  <AuthorityAdminProtectedRoute>
                     <BodyAdminConsole />
-                  </BodyAdminProtectedRoute>
-                } 
+                  </AuthorityAdminProtectedRoute>
+                }
               />
+              <Route path="/body-admin" element={<Navigate to="/authority-admin" replace />} />
               <Route 
                 path="/professionals/:uid" 
                 element={
