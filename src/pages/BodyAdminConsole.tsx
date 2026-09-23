@@ -37,21 +37,7 @@ import {
   Square
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { IndividualProfile } from '../types';
-
-interface RegulatoryAdmin {
-  uid: string;
-  fullName: string;
-  email: string;
-  body: 'PSU' | 'AHPC' | 'UNMC';
-  bodyFullName: string;
-  scopedCadres: string[];
-  role: string;
-  isActive: boolean;
-  notes?: string;
-  addedAt?: any;
-  lastLoginAt?: any;
-}
+import { IndividualProfile, ProfessionalAuthorityAdmin } from '../types';
 
 interface VerificationDoc {
   userId: string;
@@ -70,14 +56,14 @@ export const BodyAdminConsole: React.FC = () => {
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
   
-  const [adminProfile, setAdminProfile] = useState<RegulatoryAdmin | null>(null);
+  const [adminProfile, setAdminProfile] = useState<ProfessionalAuthorityAdmin | null>(null);
   const [loadingAdmin, setLoadingAdmin] = useState(true);
   const [activeTab, setActiveTab] = useState<'queue' | 'licence' | 'directory' | 'team'>('queue');
 
   // Core Data State
   const [profiles, setProfiles] = useState<any[]>([]);
   const [verificationDocs, setVerificationDocs] = useState<{ [uid: string]: VerificationDoc }>({});
-  const [adminsList, setAdminsList] = useState<RegulatoryAdmin[]>([]);
+  const [adminsList, setAdminsList] = useState<ProfessionalAuthorityAdmin[]>([]);
   const [loadingData, setLoadingData] = useState(false);
 
   // Search & Filter state for Licence & Directory
@@ -121,7 +107,7 @@ export const BodyAdminConsole: React.FC = () => {
 
     const checkAdminAffiliation = async () => {
       try {
-        const adminDocRef = doc(db, 'regulatoryBodyAdmins', user.uid);
+        const adminDocRef = doc(db, 'professionalAuthorityAdmins', user.uid);
         const adminDocSnap = await getDoc(adminDocRef);
 
         if (!adminDocSnap.exists()) {
@@ -129,7 +115,7 @@ export const BodyAdminConsole: React.FC = () => {
           return;
         }
 
-        const data = adminDocSnap.data() as RegulatoryAdmin;
+        const data = adminDocSnap.data() as ProfessionalAuthorityAdmin;
         if (data.isActive === false) {
           await signOut();
           navigate('/login');
@@ -161,41 +147,53 @@ export const BodyAdminConsole: React.FC = () => {
   const loadConsoleData = async () => {
     if (!adminProfile) return;
     setLoadingData(true);
+
     try {
-      // 1. Load profiles in cadres
-      const q = query(
-        collection(db, 'individualProfiles')
+      if (adminProfile.scopedCadres.length === 0) {
+        setProfiles([]);
+        setVerificationDocs({});
+        setAdminsList([]);
+        return;
+      }
+
+      // 1. Load only profiles that fall inside this authority administrator's cadre scope.
+      const scopedCadres = adminProfile.scopedCadres.slice(0, 30);
+      const profilesQuery = query(
+        collection(db, 'individualProfiles'),
+        where('primaryCadre', 'in', scopedCadres)
       );
-      const querySnap = await getDocs(q);
-      const allProfiles: any[] = [];
-      querySnap.forEach(profileDoc => {
-        const pData = profileDoc.data();
-        if (adminProfile.scopedCadres.includes(pData.primaryCadre)) {
-          allProfiles.push({ id: profileDoc.id, ...pData });
-        }
-      });
+      const querySnap = await getDocs(profilesQuery);
+      const allProfiles = querySnap.docs.map(profileDoc => ({
+        id: profileDoc.id,
+        ...profileDoc.data()
+      }));
       setProfiles(allProfiles);
 
-      // 2. Load associated verification documents
-      const docsSnap = await getDocs(collection(db, 'verificationDocuments'));
+      // 2. Load only verification documents belonging to the already scoped profiles.
+      const verificationEntries = await Promise.all(
+        allProfiles.map(async profile => {
+          const verificationSnap = await getDoc(doc(db, 'verificationDocuments', profile.id));
+          return verificationSnap.exists()
+            ? [profile.id, verificationSnap.data() as VerificationDoc] as const
+            : null;
+        })
+      );
       const activeDocs: { [uid: string]: VerificationDoc } = {};
-      docsSnap.forEach(vd => {
-        activeDocs[vd.id] = vd.data() as VerificationDoc;
+      verificationEntries.forEach(entry => {
+        if (entry) activeDocs[entry[0]] = entry[1];
       });
       setVerificationDocs(activeDocs);
 
-      // 3. Load administrative colleagues
-      const adminsSnap = await getDocs(collection(db, 'regulatoryBodyAdmins'));
-      const list: RegulatoryAdmin[] = [];
-      adminsSnap.forEach(ad => {
-        const adData = ad.data() as RegulatoryAdmin;
-        if (adData.body === adminProfile.body) {
-          list.push(adData);
-        }
-      });
+      // 3. Load colleagues only from the same professional authority.
+      const adminsQuery = query(
+        collection(db, 'professionalAuthorityAdmins'),
+        where('authorityId', '==', adminProfile.authorityId)
+      );
+      const adminsSnap = await getDocs(adminsQuery);
+      const list = adminsSnap.docs.map(ad => ad.data() as ProfessionalAuthorityAdmin);
       setAdminsList(list);
     } catch (err) {
-      console.error("Failed to load Regulatory Board data:", err);
+      console.error('Failed to load professional authority data:', err);
     } finally {
       setLoadingData(false);
     }
@@ -210,7 +208,7 @@ export const BodyAdminConsole: React.FC = () => {
       await updateDoc(pRef, {
         credentialVerificationStatus: 'verified',
         credentialVerifiedAt: serverTimestamp(),
-        credentialVerifiedByBody: adminProfile.bodyFullName,
+        credentialVerifiedByBody: adminProfile.authorityName,
         credentialVerifiedByUid: adminProfile.uid,
         credentialRejectionReason: '',
         practisingLicenceStatus: 'not_renewed', // Start-state is registered, needs licence updated next.
@@ -222,7 +220,7 @@ export const BodyAdminConsole: React.FC = () => {
       await updateDoc(vdRef, {
         reviewedAt: serverTimestamp(),
         reviewedByUid: adminProfile.uid,
-        reviewedByBody: adminProfile.body,
+        reviewedByBody: adminProfile.authorityId,
         reviewNotes: 'Approved during queue validation.'
       }).catch(e => console.warn("Verification documents update failed:", e));
 
@@ -254,7 +252,7 @@ export const BodyAdminConsole: React.FC = () => {
       await updateDoc(vdRef, {
         reviewedAt: serverTimestamp(),
         reviewedByUid: adminProfile.uid,
-        reviewedByBody: adminProfile.body,
+        reviewedByBody: adminProfile.authorityId,
         reviewNotes: `Rejected: ${rejectionReason}`
       }).catch(e => console.warn("Verification documents update failed:", e));
 
@@ -287,7 +285,7 @@ export const BodyAdminConsole: React.FC = () => {
       await updateDoc(vdRef, {
         reviewedAt: serverTimestamp(),
         reviewedByUid: adminProfile.uid,
-        reviewedByBody: adminProfile.body,
+        reviewedByBody: adminProfile.authorityId,
         reviewNotes: `More Info Requested: ${requestInfoNotes}`
       }).catch(e => console.warn("Verification documents update failed:", e));
 
@@ -424,14 +422,14 @@ export const BodyAdminConsole: React.FC = () => {
             <div>
               <div className="flex items-center gap-2">
                 <span className="text-[10px] font-black uppercase tracking-widest bg-emerald-600 text-white px-2.5 py-0.5 rounded-md">
-                  Official Portal
+                  Authority Portal
                 </span>
                 <span className="text-xs text-indigo-200 uppercase font-bold tracking-wider font-mono">
-                  {adminProfile.body} Scoped Console
+                  {adminProfile.authorityId} Scoped Console
                 </span>
               </div>
               <h1 className="text-xl md:text-2xl font-black tracking-tight mt-1">
-                {adminProfile.bodyFullName}
+                {adminProfile.authorityName}
               </h1>
             </div>
           </div>
@@ -565,7 +563,7 @@ export const BodyAdminConsole: React.FC = () => {
                     <div className="flex items-center justify-between">
                       <div>
                         <h2 className="text-xl font-bold text-zinc-900">Verification Backlog</h2>
-                        <p className="text-xs text-zinc-500 mt-1">Pending registration checks and certificate reviews awaiting official {adminProfile.body} seal of approval.</p>
+                        <p className="text-xs text-zinc-500 mt-1">Pending registration checks and certificate reviews awaiting official {adminProfile.authorityId} seal of approval.</p>
                       </div>
                       <span className="text-xs font-black uppercase bg-[#1A237E]/10 text-[#1A237E] p-2 px-3 rounded-lg font-mono">
                         {currentQueue.length} Pending
@@ -911,7 +909,7 @@ export const BodyAdminConsole: React.FC = () => {
                 {activeTab === 'team' && (
                   <div className="space-y-6">
                     <div>
-                      <h2 className="text-xl font-bold text-zinc-900">{adminProfile.bodyFullName} Staff Roster</h2>
+                      <h2 className="text-xl font-bold text-zinc-900">{adminProfile.authorityName} Staff Roster</h2>
                       <p className="text-xs text-zinc-500 mt-1">Colleagues and officers with designated clearance inside your administrative division.</p>
                     </div>
 
