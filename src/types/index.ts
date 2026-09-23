@@ -1,5 +1,21 @@
 export type AccountType = 'individual' | 'organisation';
 
+export type AccountClass =
+  | 'professional'
+  | 'organisation'
+  | 'professional_authority'
+  | 'platform_admin';
+
+export type AccountStatus =
+  | 'PENDING_PROFILE'
+  | 'PENDING_AUTHORITY_VERIFICATION'
+  | 'MORE_INFORMATION_REQUIRED'
+  | 'ACTIVE'
+  | 'INACTIVE_ANNUAL_COMPLIANCE'
+  | 'SUSPENDED_BY_AUTHORITY'
+  | 'REJECTED'
+  | 'DEACTIVATED_BY_PLATFORM';
+
 export type PrimaryCadre = 
   | 'pharmacist' 
   | 'pharmacy_technician' 
@@ -32,6 +48,8 @@ export type OrganizationType =
 export interface UserAccount {
   id: string;
   accountType: AccountType;
+  accountClass?: AccountClass;
+  accountStatus?: AccountStatus;
   isActive: boolean;
   isVerified: boolean;
   createdAt: any;
