@@ -38,9 +38,14 @@ const CreateAvailabilityPost: React.FC = () => {
         where('status', '==', 'active')
       );
       const snap = await getDocs(q);
-      if (!snap.empty) {
-        setExistingPostId(snap.docs[0].id);
-      }
+      const now = Date.now();
+      const existingActive = snap.docs.find(postDoc => {
+        const expiresAt = postDoc.data().expiresAt;
+        if (!expiresAt) return false;
+        const expiresMillis = expiresAt.toMillis ? expiresAt.toMillis() : new Date(expiresAt).getTime();
+        return expiresMillis > now;
+      });
+      setExistingPostId(existingActive?.id || null);
     };
     checkExisting();
   }, [user]);
