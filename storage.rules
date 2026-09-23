@@ -16,6 +16,12 @@ service firebase.storage {
         && firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.isActive == true;
     }
 
+    function isVisibleProfessional(userId) {
+      return firestore.exists(/databases/(default)/documents/individualProfiles/$(userId))
+        && firestore.get(/databases/(default)/documents/individualProfiles/$(userId)).data.isDirectoryVisible == true
+        && firestore.get(/databases/(default)/documents/individualProfiles/$(userId)).data.profileCompleteness >= 60;
+    }
+
     function isAuthorityAdmin() {
       return isSignedIn()
         && request.auth.token.authority_admin == true
@@ -67,7 +73,7 @@ service firebase.storage {
     match /profilePhotos/{userId}/{fileName} {
       allow read: if isSignedIn() && (
         request.auth.uid == userId
-        || isActiveMember()
+        || (isActiveMember() && isVisibleProfessional(userId))
         || isPlatformAdmin()
       );
 
@@ -84,7 +90,7 @@ service firebase.storage {
     match /cvFiles/{userId}/{fileName} {
       allow read: if isSignedIn() && (
         request.auth.uid == userId
-        || isActiveMember()
+        || (isActiveMember() && isVisibleProfessional(userId))
         || isPlatformAdmin()
       );
 
