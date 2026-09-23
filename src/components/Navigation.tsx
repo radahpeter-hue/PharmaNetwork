@@ -23,12 +23,10 @@ import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../lib/utils';
 
 export const Navigation: React.FC = () => {
-  const { user, userAccount, signOut, loading } = useAuth();
+  const { user, userAccount, isPlatformAdmin, isAuthorityAdmin, signOut, loading } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
-  const [isAdmin, setIsAdmin] = useState(false);
-  const [isBodyAdmin, setIsBodyAdmin] = useState(false);
   const [maintenanceModeOn, setMaintenanceModeOn] = useState(false);
   const location = useLocation();
   const menuRef = useRef<HTMLDivElement>(null);
@@ -53,28 +51,7 @@ export const Navigation: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    if (!user) {
-      setUnreadCount(0);
-      setIsAdmin(false);
-      setIsBodyAdmin(false);
-      return;
-    }
-
-    // Privileged navigation is derived only from backend-issued custom claims.
-    const checkPrivilegedClaims = async () => {
-      try {
-        const idTokenResult = await user.getIdTokenResult(true);
-        setIsAdmin(idTokenResult.claims.admin === true);
-        setIsBodyAdmin(idTokenResult.claims.body_admin === true);
-      } catch (err) {
-        console.error('Error verifying privileged claims:', err);
-        setIsAdmin(false);
-        setIsBodyAdmin(false);
-      }
-    };
-    checkPrivilegedClaims();
-
-    if (!activeMember) {
+    if (!user || !activeMember) {
       setUnreadCount(0);
       return;
     }
@@ -114,28 +91,36 @@ export const Navigation: React.FC = () => {
     return () => document.removeEventListener('mousedown', handleOutsideClick);
   }, []);
 
-  const navLinks = user
-    ? activeMember
+  const navLinks = isPlatformAdmin
+    ? [
+        { name: 'Admin Console', href: '/admin', icon: ShieldCheck },
+      ]
+    : isAuthorityAdmin
       ? [
-          { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-          { name: 'Marketplace', href: '/jobs', icon: Briefcase },
-          { name: 'Professionals', href: '/browse/professionals', icon: UserIcon },
-          { name: 'Organisations', href: '/browse/organisations', icon: Building },
-          {
-            name: 'Messages',
-            href: '/messages',
-            icon: MessageSquare,
-            badge: unreadCount > 0 ? (unreadCount >= 9 ? '9+' : unreadCount.toString()) : undefined
-          },
+          { name: 'Authority Console', href: '/authority-admin', icon: ShieldCheck },
         ]
-      : [
-          { name: 'Account Status', href: '/account-status', icon: ShieldCheck },
-          { name: 'My Profile', href: '/profile', icon: UserIcon },
-        ]
-    : [
-        { name: 'Home', href: '/' },
-        { name: 'Marketplace', href: '#', tooltip: 'Login to browse', grayed: true },
-      ];
+      : user
+        ? activeMember
+          ? [
+              { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
+              { name: 'Marketplace', href: '/jobs', icon: Briefcase },
+              { name: 'Professionals', href: '/browse/professionals', icon: UserIcon },
+              { name: 'Organisations', href: '/browse/organisations', icon: Building },
+              {
+                name: 'Messages',
+                href: '/messages',
+                icon: MessageSquare,
+                badge: unreadCount > 0 ? (unreadCount >= 9 ? '9+' : unreadCount.toString()) : undefined
+              },
+            ]
+          : [
+              { name: 'Account Status', href: '/account-status', icon: ShieldCheck },
+              { name: 'My Profile', href: '/profile', icon: UserIcon },
+            ]
+        : [
+            { name: 'Home', href: '/' },
+            { name: 'Marketplace', href: '#', tooltip: 'Login to browse', grayed: true },
+          ];
 
   const handleLinkClick = (link: any) => {
     if (link.grayed) return;
@@ -144,7 +129,7 @@ export const Navigation: React.FC = () => {
 
   return (
     <>
-      {maintenanceModeOn && !isAdmin && (
+      {maintenanceModeOn && !isPlatformAdmin && (
         <div id="maintenance-banner" className="fixed top-0 left-0 right-0 z-[100] bg-amber-600 text-white px-4 py-2.5 text-center text-[10px] sm:text-xs font-black uppercase tracking-wider flex items-center justify-center gap-2 shadow-md">
           <span className="w-2 h-2 rounded-full bg-white animate-ping"></span>
           Scheduled Platform Maintenance: Features are active, but please expect temporary updates.
@@ -152,7 +137,7 @@ export const Navigation: React.FC = () => {
       )}
       <nav className={cn(
         "fixed left-0 right-0 z-50 bg-white border-b border-zinc-100 shadow-sm transition-all duration-300",
-        maintenanceModeOn && !isAdmin ? "top-10" : "top-0"
+        maintenanceModeOn && !isPlatformAdmin ? "top-10" : "top-0"
       )}>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between h-20 items-center">
@@ -225,59 +210,64 @@ export const Navigation: React.FC = () => {
                             <p className="text-xs font-semibold text-zinc-700 truncate mt-0.5">{user.email}</p>
                           </div>
 
-                          {!activeMember && (
-                            <Link
-                              to="/account-status"
-                              onClick={() => setIsUserMenuOpen(false)}
-                              className="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-primary hover:bg-primary/5 transition-all"
-                            >
-                              <ShieldCheck size={16} />
-                              Account Status
-                            </Link>
-                          )}
-
-                          <Link 
-                            to="/profile" 
-                            onClick={() => setIsUserMenuOpen(false)}
-                            className="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-zinc-700 hover:bg-primary/5 hover:text-primary transition-all"
-                          >
-                            <UserIcon size={16} />
-                            My Profile
-                          </Link>
-
-                          {activeMember && (
+                          {userAccount && (
                             <>
-                                                        <Link 
-                                                          to="/my-postings" 
-                                                          onClick={() => setIsUserMenuOpen(false)}
-                                                          className="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-zinc-700 hover:bg-primary/5 hover:text-primary transition-all"
-                                                        >
-                                                          <FileText size={16} />
-                                                          My Postings
-                                                        </Link>
+                                                        {!activeMember && (
+                                                          <Link
+                                                            to="/account-status"
+                                                            onClick={() => setIsUserMenuOpen(false)}
+                                                            className="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-primary hover:bg-primary/5 transition-all"
+                                                          >
+                                                            <ShieldCheck size={16} />
+                                                            Account Status
+                                                          </Link>
+                                                        )}
                               
                                                         <Link 
-                                                          to="/my-listings" 
+                                                          to="/profile" 
                                                           onClick={() => setIsUserMenuOpen(false)}
                                                           className="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-zinc-700 hover:bg-primary/5 hover:text-primary transition-all"
                                                         >
-                                                          <Store size={16} />
-                                                          My Listings
+                                                          <UserIcon size={16} />
+                                                          My Profile
+                                                        </Link>
+                              
+                                                        {activeMember && (
+                                                          <>
+                                                                                      <Link 
+                                                                                        to="/my-postings" 
+                                                                                        onClick={() => setIsUserMenuOpen(false)}
+                                                                                        className="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-zinc-700 hover:bg-primary/5 hover:text-primary transition-all"
+                                                                                      >
+                                                                                        <FileText size={16} />
+                                                                                        My Postings
+                                                                                      </Link>
+                                                            
+                                                                                      <Link 
+                                                                                        to="/my-listings" 
+                                                                                        onClick={() => setIsUserMenuOpen(false)}
+                                                                                        className="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-zinc-700 hover:bg-primary/5 hover:text-primary transition-all"
+                                                                                      >
+                                                                                        <Store size={16} />
+                                                                                        My Listings
+                                                                                      </Link>
+                                                            
+                                                                                        </>
+                                                        )}
+                              
+                                                        <Link 
+                                                          to="/settings" 
+                                                          onClick={() => setIsUserMenuOpen(false)}
+                                                          className="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-zinc-750 hover:bg-primary/5 hover:text-primary transition-all opacity-60"
+                                                        >
+                                                          <Settings size={16} />
+                                                          Settings
                                                         </Link>
                               
                                                           </>
                           )}
 
-                          <Link 
-                            to="/settings" 
-                            onClick={() => setIsUserMenuOpen(false)}
-                            className="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-zinc-750 hover:bg-primary/5 hover:text-primary transition-all opacity-60"
-                          >
-                            <Settings size={16} />
-                            Settings
-                          </Link>
-
-                          {isAdmin && (
+                          {isPlatformAdmin && (
                             <Link 
                               to="/admin" 
                               onClick={() => setIsUserMenuOpen(false)}
@@ -288,14 +278,14 @@ export const Navigation: React.FC = () => {
                             </Link>
                           )}
 
-                          {isBodyAdmin && (
+                          {isAuthorityAdmin && (
                             <Link 
-                              to="/body-admin" 
+                              to="/authority-admin" 
                               onClick={() => setIsUserMenuOpen(false)}
                               className="flex items-center gap-2 px-4 py-2 text-sm font-black text-[#1A237E] bg-indigo-50 hover:bg-indigo-100 hover:text-indigo-850 transition-all border-t border-b border-indigo-100 my-1 font-mono uppercase text-[11px]"
                             >
                               <ShieldCheck size={16} />
-                              Regulatory Console
+                              Authority Console
                             </Link>
                           )}
 
@@ -403,7 +393,7 @@ export const Navigation: React.FC = () => {
                       <Store size={20} />
                       My Listings
                     </Link>
-                    {isAdmin && (
+                    {isPlatformAdmin && (
                       <Link
                         to="/admin"
                         onClick={() => setIsOpen(false)}
@@ -413,7 +403,7 @@ export const Navigation: React.FC = () => {
                         Admin Console
                       </Link>
                     )}
-                    {isBodyAdmin && (
+                    {isAuthorityAdmin && (
                       <Link
                         to="/body-admin"
                         onClick={() => setIsOpen(false)}
