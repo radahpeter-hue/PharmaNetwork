@@ -129,11 +129,11 @@ export const MyPostings: React.FC = () => {
         await updateDoc(ref, { status: 'closed' });
         setToast({ isVisible: true, message: 'Posting closed.', type: 'success' });
       } else if (action === 'renew') {
-        const newExpiry = new Date(Date.now() + 65 * 24 * 60 * 60 * 1000);
-        await updateDoc(ref, { 
-          status: 'active', 
+        const newExpiry = new Date(Date.now() + 60 * 24 * 60 * 60 * 1000);
+        await updateDoc(ref, {
+          status: 'active',
           expiresAt: Timestamp.fromDate(newExpiry),
-          createdAt: Timestamp.now()
+          renewedAt: Timestamp.now()
         });
         setToast({ isVisible: true, message: 'Posting renewed for 60 days.', type: 'success' });
       }
