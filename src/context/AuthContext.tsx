@@ -9,6 +9,8 @@ interface AuthContextType {
   userAccount: UserAccount | null;
   profile: IndividualProfile | OrganisationProfile | null;
   loading: boolean;
+  isPlatformAdmin: boolean;
+  isAuthorityAdmin: boolean;
   signOut: () => Promise<void>;
   refreshUserData: () => Promise<void>;
 }
@@ -20,15 +22,30 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [userAccount, setUserAccount] = useState<UserAccount | null>(null);
   const [profile, setProfile] = useState<IndividualProfile | OrganisationProfile | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isPlatformAdmin, setIsPlatformAdmin] = useState(false);
+  const [isAuthorityAdmin, setIsAuthorityAdmin] = useState(false);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       setUser(currentUser);
+
       if (currentUser) {
-        await fetchUserData(currentUser.uid);
+        try {
+          const tokenResult = await currentUser.getIdTokenResult();
+          setIsPlatformAdmin(tokenResult.claims.admin === true);
+          setIsAuthorityAdmin(tokenResult.claims.authority_admin === true);
+          await fetchUserData(currentUser.uid);
+        } catch (error) {
+          console.error('Error resolving authenticated account context:', error);
+          setIsPlatformAdmin(false);
+          setIsAuthorityAdmin(false);
+          setLoading(false);
+        }
       } else {
         setUserAccount(null);
         setProfile(null);
+        setIsPlatformAdmin(false);
+        setIsAuthorityAdmin(false);
         setLoading(false);
       }
     });
@@ -79,14 +96,35 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!auth.currentUser) {
       setUserAccount(null);
       setProfile(null);
+      setIsPlatformAdmin(false);
+      setIsAuthorityAdmin(false);
       return;
     }
+
     setLoading(true);
-    await fetchUserData(auth.currentUser.uid);
+
+    try {
+      const tokenResult = await auth.currentUser.getIdTokenResult(true);
+      setIsPlatformAdmin(tokenResult.claims.admin === true);
+      setIsAuthorityAdmin(tokenResult.claims.authority_admin === true);
+      await fetchUserData(auth.currentUser.uid);
+    } catch (error) {
+      console.error('Error refreshing authenticated account context:', error);
+      setLoading(false);
+    }
   };
 
   return (
-    <AuthContext.Provider value={{ user, userAccount, profile, loading, signOut, refreshUserData }}>
+    <AuthContext.Provider value={{
+      user,
+      userAccount,
+      profile,
+      loading,
+      isPlatformAdmin,
+      isAuthorityAdmin,
+      signOut,
+      refreshUserData
+    }}>
       {children}
     </AuthContext.Provider>
   );
