@@ -371,12 +371,20 @@ service cloud.firestore {
       allow read: if isActiveMember() || isAdmin();
       allow create: if isActiveMember()
         && request.resource.data.organisationUserId == request.auth.uid
-        && currentAccountType() == 'organisation';
+        && currentAccountType() == 'organisation'
+        && request.resource.data.status == 'active'
+        && request.resource.data.interestCount == 0
+        && request.resource.data.expiresAt > request.time
+        && request.resource.data.expiresAt <= request.time + duration.value(60, 'd');
       allow update: if isAdmin()
         || (
           isActiveMember()
           && resource.data.organisationUserId == request.auth.uid
           && request.resource.data.organisationUserId == resource.data.organisationUserId
+          && request.resource.data.createdAt == resource.data.createdAt
+          && request.resource.data.interestCount == resource.data.interestCount
+          && request.resource.data.status in ['active', 'closed', 'expired']
+          && request.resource.data.expiresAt <= request.time + duration.value(60, 'd')
         )
         || validJobInterestIncrement(jobId);
       allow delete: if isAdmin()
@@ -390,12 +398,20 @@ service cloud.firestore {
       allow read: if isActiveMember() || isAdmin();
       allow create: if isActiveMember()
         && request.resource.data.individualUserId == request.auth.uid
-        && currentAccountType() == 'individual';
+        && currentAccountType() == 'individual'
+        && request.resource.data.status == 'active'
+        && request.resource.data.interestCount == 0
+        && request.resource.data.expiresAt > request.time
+        && request.resource.data.expiresAt <= request.time + duration.value(60, 'd');
       allow update: if isAdmin()
         || (
           isActiveMember()
           && resource.data.individualUserId == request.auth.uid
           && request.resource.data.individualUserId == resource.data.individualUserId
+          && request.resource.data.createdAt == resource.data.createdAt
+          && request.resource.data.interestCount == resource.data.interestCount
+          && request.resource.data.status in ['active', 'closed', 'expired']
+          && request.resource.data.expiresAt <= request.time + duration.value(60, 'd')
         )
         || validAvailabilityInterestIncrement(postId);
       allow delete: if isAdmin()
@@ -451,14 +467,22 @@ service cloud.firestore {
       allow create: if isActiveMember()
         && request.resource.data.sellerUserId == request.auth.uid
         && request.resource.data.photoUrls is list
-        && request.resource.data.photoUrls.size() <= 3;
+        && request.resource.data.photoUrls.size() <= 3
+        && request.resource.data.status == 'active'
+        && request.resource.data.viewCount == 0
+        && request.resource.data.expiresAt > request.time
+        && request.resource.data.expiresAt <= request.time + duration.value(90, 'd');
       allow update: if isAdmin()
         || (
           isActiveMember()
           && resource.data.sellerUserId == request.auth.uid
           && request.resource.data.sellerUserId == resource.data.sellerUserId
+          && request.resource.data.createdAt == resource.data.createdAt
+          && request.resource.data.viewCount == resource.data.viewCount
           && request.resource.data.photoUrls is list
           && request.resource.data.photoUrls.size() <= 3
+          && request.resource.data.status in ['active', 'under_offer', 'sold', 'withdrawn']
+          && request.resource.data.expiresAt <= request.time + duration.value(90, 'd')
         );
       allow delete: if isAdmin()
         || (
