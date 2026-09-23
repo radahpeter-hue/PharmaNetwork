@@ -35,16 +35,16 @@ interface OrgDetail {
   about?: string;
 }
 
-interface OrganisationProfileDoc {
-  id: string; // docId / userId
-  organisations?: OrgDetail[];
+interface OrganisationCard extends OrgDetail {
+  id: string;
+  ownerUserId: string;
 }
 
 const BrowseOrganisations: React.FC = () => {
   const { user, userAccount } = useAuth();
   const navigate = useNavigate();
 
-  const [organisations, setOrganisations] = useState<OrganisationProfileDoc[]>([]);
+  const [organisations, setOrganisations] = useState<OrganisationCard[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedDistrict, setSelectedDistrict] = useState('All');
@@ -59,12 +59,17 @@ const BrowseOrganisations: React.FC = () => {
       setLoading(true);
       try {
         const querySnap = await getDocs(collection(db, 'organisationProfiles'));
-        const list: OrganisationProfileDoc[] = [];
+        const list: OrganisationCard[] = [];
         querySnap.forEach((docSnap) => {
-          list.push({
-            id: docSnap.id,
-            ...docSnap.data()
-          } as OrganisationProfileDoc);
+          const profile = docSnap.data() as { organisations?: OrgDetail[] };
+          (profile.organisations || []).forEach((organisation, index) => {
+            if (!organisation.organisationName) return;
+            list.push({
+              ...organisation,
+              id: organisation.id || `${docSnap.id}_org_${index}`,
+              ownerUserId: docSnap.id
+            });
+          });
         });
         setOrganisations(list);
       } catch (err) {
@@ -91,39 +96,23 @@ const BrowseOrganisations: React.FC = () => {
     selectedType !== 'All' || 
     onlyHiring;
 
-  // Filters client-side on the list
-  const filteredOrganisations = organisations.filter((orgDoc) => {
-    const primaryOrg = orgDoc.organisations?.[0];
-    if (!primaryOrg) return false; // Ignore incomplete profiles
-
-    // Search query matching
+  // Filters operate on individual organisations, not only the first organisation in an account.
+  const filteredOrganisations = organisations.filter((organisation) => {
     if (searchQuery.trim() !== '') {
       const q = searchQuery.toLowerCase();
-      const nameMatch = (primaryOrg.organisationName || '').toLowerCase().includes(q);
-      const ndaMatch = (primaryOrg.ndaLicenceNumber || '').toLowerCase().includes(q);
-      const aboutMatch = (primaryOrg.about || '').toLowerCase().includes(q);
-      if (!nameMatch && !ndaMatch && !aboutMatch) {
-        return false;
-      }
+      const nameMatch = (organisation.organisationName || '').toLowerCase().includes(q);
+      const licenceMatch = (organisation.ndaLicenceNumber || '').toLowerCase().includes(q);
+      const aboutMatch = (organisation.about || '').toLowerCase().includes(q);
+      if (!nameMatch && !licenceMatch && !aboutMatch) return false;
     }
 
-    // District matching
-    if (selectedDistrict !== 'All' && primaryOrg.district !== selectedDistrict) {
+    if (selectedDistrict !== 'All' && organisation.district !== selectedDistrict) return false;
+
+    if (selectedType !== 'All' && !(organisation.organisationTypes || []).includes(selectedType)) {
       return false;
     }
 
-    // Organization Type matching
-    if (selectedType !== 'All') {
-      const typesList = primaryOrg.organisationTypes || [];
-      if (!typesList.includes(selectedType)) {
-        return false;
-      }
-    }
-
-    // Hiring toggle
-    if (onlyHiring && !primaryOrg.isHiring) {
-      return false;
-    }
+    if (onlyHiring && !organisation.isHiring) return false;
 
     return true;
   });
@@ -134,13 +123,13 @@ const BrowseOrganisations: React.FC = () => {
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-12">
         <div>
           <h1 className="text-4xl font-extrabold text-zinc-950 tracking-tight">Registered Organisations</h1>
-          <p className="text-zinc-500 mt-2">Browse pharmacies, wholesale drug distributors, and NDA certified medical facilities in Uganda.</p>
+          <p className="text-zinc-500 mt-2">Browse healthcare and pharmaceutical organisations participating in the PharmaNetwork member network.</p>
         </div>
 
         {userAccount?.accountType === 'organisation' && (
-          <Link to="/profile">
+          <Link to="/profile/edit/organisation">
             <Button className="gap-2 font-bold">
-              Manage Company Profile
+              Manage Organisation Profile
             </Button>
           </Link>
         )}
@@ -255,11 +244,10 @@ const BrowseOrganisations: React.FC = () => {
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <AnimatePresence mode="popLayout">
-                {filteredOrganisations.map((orgDoc) => {
-                  const o = orgDoc.organisations![0];
+                {filteredOrganisations.map((o) => {
                   return (
                     <motion.div
-                      key={orgDoc.id}
+                      key={`${o.ownerUserId}_${o.id}`}
                       layout
                       initial={{ opacity: 0, y: 15 }}
                       animate={{ opacity: 1, y: 0 }}
@@ -275,7 +263,7 @@ const BrowseOrganisations: React.FC = () => {
 
                           <div className="flex-grow min-w-0">
                             <div className="flex items-center gap-1.5 mb-1 flex-wrap">
-                              <span className="font-black text-zinc-900 leading-snug text-base tracking-tight hover:underline cursor-pointer" onClick={() => navigate(`/organisations/${orgDoc.id}`)}>
+                              <span className="font-black text-zinc-900 leading-snug text-base tracking-tight hover:underline cursor-pointer" onClick={() => navigate(`/organisations/${o.ownerUserId}`)}>
                                 {o.organisationName}
                               </span>
                               {o.ndaLicenceNumber && (
@@ -329,14 +317,14 @@ const BrowseOrganisations: React.FC = () => {
                               Hiring
                             </span>
                           ) : (
-                            <span className="text-[10px] text-zinc-400 font-bold uppercase">NDA Registered</span>
+                            <span className="text-[10px] text-zinc-400 font-bold uppercase">Organisation</span>
                           )}
                         </div>
 
                         <div className="flex items-center gap-2">
-                          {user && user.uid !== orgDoc.id && (
+                          {user && user.uid !== o.ownerUserId && (
                             <button
-                              onClick={() => setActiveChatRecipient({ id: orgDoc.id, name: o.organisationName })}
+                              onClick={() => setActiveChatRecipient({ id: o.ownerUserId, name: o.organisationName })}
                               className="p-2 sm:px-3 sm:py-2 bg-primary/5 hover:bg-primary hover:text-white text-primary transition-all rounded-xl text-xs font-bold flex items-center gap-1"
                               title="Message Organisation"
                             >
@@ -344,7 +332,7 @@ const BrowseOrganisations: React.FC = () => {
                               <span className="hidden sm:inline">Message</span>
                             </button>
                           )}
-                          <Link to={`/organisations/${orgDoc.id}`}>
+                          <Link to={`/organisations/${o.ownerUserId}`}>
                             <button className="p-2 bg-zinc-50 hover:bg-zinc-100 text-zinc-500 rounded-xl transition-all shadow-xs border border-zinc-100 cursor-pointer animate-fade-in">
                               <ChevronRight size={16} />
                             </button>
