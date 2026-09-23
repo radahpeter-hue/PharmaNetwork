@@ -139,6 +139,32 @@ service cloud.firestore {
         );
     }
 
+    function currentAccountType() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.accountType;
+    }
+
+    function validJobInterestIncrement(jobId) {
+      let eventId = 'job_interest__' + jobId + '__' + request.auth.uid;
+      return isActiveMember()
+        && currentAccountType() == 'individual'
+        && request.resource.data.organisationUserId == resource.data.organisationUserId
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['interestCount'])
+        && request.resource.data.interestCount == resource.data.interestCount + 1
+        && !exists(/databases/$(database)/documents/interestEvents/$(eventId))
+        && existsAfter(/databases/$(database)/documents/interestEvents/$(eventId));
+    }
+
+    function validAvailabilityInterestIncrement(postId) {
+      let eventId = 'availability_interest__' + postId + '__' + request.auth.uid;
+      return isActiveMember()
+        && currentAccountType() == 'organisation'
+        && request.resource.data.individualUserId == resource.data.individualUserId
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['interestCount'])
+        && request.resource.data.interestCount == resource.data.interestCount + 1
+        && !exists(/databases/$(database)/documents/interestEvents/$(eventId))
+        && existsAfter(/databases/$(database)/documents/interestEvents/$(eventId));
+    }
+
     function professionalVerificationFieldsUnchanged() {
       return !request.resource.data.diff(resource.data).affectedKeys().hasAny([
         'credentialVerificationStatus',
@@ -345,42 +371,67 @@ service cloud.firestore {
       allow read: if isActiveMember() || isAdmin();
       allow create: if isActiveMember()
         && request.resource.data.organisationUserId == request.auth.uid
-        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.accountType == 'organisation';
-      allow update: if isSignedIn() && (
-        (
-          (resource.data.organisationUserId == request.auth.uid || isAdmin())
+        && currentAccountType() == 'organisation';
+      allow update: if isAdmin()
+        || (
+          isActiveMember()
+          && resource.data.organisationUserId == request.auth.uid
           && request.resource.data.organisationUserId == resource.data.organisationUserId
         )
+        || validJobInterestIncrement(jobId);
+      allow delete: if isAdmin()
         || (
-          request.resource.data.organisationUserId == resource.data.organisationUserId
-          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['interestCount'])
-          && request.resource.data.interestCount == resource.data.interestCount + 1
-        )
-      );
-      allow delete: if isSignedIn() && (resource.data.organisationUserId == request.auth.uid || isAdmin());
+          isActiveMember()
+          && resource.data.organisationUserId == request.auth.uid
+        );
     }
 
     match /availabilityPosts/{postId} {
       allow read: if isActiveMember() || isAdmin();
       allow create: if isActiveMember()
         && request.resource.data.individualUserId == request.auth.uid
-        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.accountType == 'individual';
-      allow update: if isSignedIn() && (
-        (
-          (resource.data.individualUserId == request.auth.uid || isAdmin())
+        && currentAccountType() == 'individual';
+      allow update: if isAdmin()
+        || (
+          isActiveMember()
+          && resource.data.individualUserId == request.auth.uid
           && request.resource.data.individualUserId == resource.data.individualUserId
         )
+        || validAvailabilityInterestIncrement(postId);
+      allow delete: if isAdmin()
         || (
-          request.resource.data.individualUserId == resource.data.individualUserId
-          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['interestCount'])
-          && request.resource.data.interestCount == resource.data.interestCount + 1
-        )
-      );
-      allow delete: if isSignedIn() && (resource.data.individualUserId == request.auth.uid || isAdmin());
+          isActiveMember()
+          && resource.data.individualUserId == request.auth.uid
+        );
     }
 
     match /interestEvents/{eventId} {
-      allow create: if isActiveMember() && request.resource.data.actorId == request.auth.uid;
+      allow create: if isActiveMember()
+        && request.resource.data.actorId == request.auth.uid
+        && request.resource.data.keys().hasOnly([
+          'actorId',
+          'targetId',
+          'type',
+          'timestamp'
+        ])
+        && (
+          (
+            request.resource.data.type == 'job_interest'
+            && currentAccountType() == 'individual'
+            && eventId == 'job_interest__' + request.resource.data.targetId + '__' + request.auth.uid
+            && exists(/databases/$(database)/documents/jobPostings/$(request.resource.data.targetId))
+            && get(/databases/$(database)/documents/jobPostings/$(request.resource.data.targetId)).data.status == 'active'
+            && get(/databases/$(database)/documents/jobPostings/$(request.resource.data.targetId)).data.expiresAt > request.time
+          )
+          || (
+            request.resource.data.type == 'availability_interest'
+            && currentAccountType() == 'organisation'
+            && eventId == 'availability_interest__' + request.resource.data.targetId + '__' + request.auth.uid
+            && exists(/databases/$(database)/documents/availabilityPosts/$(request.resource.data.targetId))
+            && get(/databases/$(database)/documents/availabilityPosts/$(request.resource.data.targetId)).data.status == 'active'
+            && get(/databases/$(database)/documents/availabilityPosts/$(request.resource.data.targetId)).data.expiresAt > request.time
+          )
+        );
       allow read: if isActiveMember() && resource.data.actorId == request.auth.uid;
       allow update, delete: if isAdmin();
     }
@@ -398,10 +449,17 @@ service cloud.firestore {
     match /businessListings/{listingId} {
       allow read: if isActiveMember() || isAdmin();
       allow create: if isActiveMember() && request.resource.data.sellerUserId == request.auth.uid;
-      allow update: if isSignedIn()
-        && (resource.data.sellerUserId == request.auth.uid || isAdmin())
-        && request.resource.data.sellerUserId == resource.data.sellerUserId;
-      allow delete: if isSignedIn() && (resource.data.sellerUserId == request.auth.uid || isAdmin());
+      allow update: if isAdmin()
+        || (
+          isActiveMember()
+          && resource.data.sellerUserId == request.auth.uid
+          && request.resource.data.sellerUserId == resource.data.sellerUserId
+        );
+      allow delete: if isAdmin()
+        || (
+          isActiveMember()
+          && resource.data.sellerUserId == request.auth.uid
+        );
     }
 
     match /messages/{conversationId} {
