@@ -7,7 +7,7 @@ import { Button } from '../components/Button';
 import { JobPosting } from '../types';
 import { Toast, ToastType } from '../components/Toast';
 import { ArrowLeft, Save, FileText, MapPin } from 'lucide-react';
-import { UGANDA_DISTRICTS } from '../constants';
+import { EMPLOYMENT_TYPES, PROFESSIONAL_CADRES, UGANDA_DISTRICTS, normalizeProfessionalCadreId } from '../constants';
 
 const EditJobPosting: React.FC = () => {
   const { postingId } = useParams();
@@ -30,7 +30,10 @@ const EditJobPosting: React.FC = () => {
             navigate('/dashboard');
             return;
           }
-          setJob(data);
+          setJob({
+            ...data,
+            cadreRequired: normalizeProfessionalCadreId(data.cadreRequired)
+          });
         }
       } catch (err) {
         console.error('Error fetching job:', err);
@@ -56,7 +59,9 @@ const EditJobPosting: React.FC = () => {
         title: job.title,
         description: job.description,
         requirements: job.requirements,
-        district: job.district
+        district: job.district,
+        cadreRequired: job.cadreRequired,
+        employmentType: job.employmentType
       });
       setToast({ isVisible: true, message: 'Posting updated.', type: 'success' });
       setTimeout(() => navigate(`/jobs/${postingId}`), 1500);
@@ -90,6 +95,34 @@ const EditJobPosting: React.FC = () => {
               onChange={(e) => setJob({ ...job, title: e.target.value })}
               className="w-full border border-zinc-200 rounded-xl px-4 py-3 focus:ring-2 focus:ring-primary outline-none"
             />
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            <div>
+              <label className="block text-sm font-bold text-zinc-700 mb-2">Professional Cadre</label>
+              <select
+                value={job.cadreRequired}
+                onChange={(e) => setJob({ ...job, cadreRequired: e.target.value })}
+                className="w-full border border-zinc-200 rounded-xl px-4 py-3 focus:ring-2 focus:ring-primary outline-none bg-white"
+              >
+                {PROFESSIONAL_CADRES.map(cadre => (
+                  <option key={cadre.id} value={cadre.id}>{cadre.label}</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-bold text-zinc-700 mb-2">Employment Type</label>
+              <select
+                value={job.employmentType}
+                onChange={(e) => setJob({ ...job, employmentType: e.target.value })}
+                className="w-full border border-zinc-200 rounded-xl px-4 py-3 focus:ring-2 focus:ring-primary outline-none bg-white"
+              >
+                {EMPLOYMENT_TYPES.map(type => (
+                  <option key={type.id} value={type.id}>{type.label}</option>
+                ))}
+              </select>
+            </div>
           </div>
 
           <div>

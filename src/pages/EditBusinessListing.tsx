@@ -2,12 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
-import { doc, getDoc, updateDoc } from 'firebase/firestore';
+import { doc, getDoc, serverTimestamp, writeBatch } from 'firebase/firestore';
 import { Button } from '../components/Button';
 import { Toast, ToastType } from '../components/Toast';
-import { Store, ChevronLeft, HelpCircle, Save, Info, Image as ImageIcon } from 'lucide-react';
+import { Store, ChevronLeft, HelpCircle, Save, Info, Image as ImageIcon, UploadCloud } from 'lucide-react';
 import { motion } from 'motion/react';
 import { cn } from '../lib/utils';
+import { getDownloadURL, getStorage, ref, uploadBytes } from 'firebase/storage';
 
 const WHAT_IS_INCLUDED_OPTIONS = [
   { id: 'inventory', label: 'Inventory (stock at cost)' },
@@ -34,7 +35,9 @@ export const EditBusinessListing: React.FC = () => {
   const [askingPriceUGX, setAskingPriceUGX] = useState('');
   const [priceNegotiable, setPriceNegotiable] = useState(true);
   const [whatsIncluded, setWhatsIncluded] = useState<string[]>([]);
-  const [photoUrlInput, setPhotoUrlInput] = useState('');
+  const [existingPhotoUrls, setExistingPhotoUrls] = useState<string[]>([]);
+  const [newPhotoFiles, setNewPhotoFiles] = useState<File[]>([]);
+  const [isConfidential, setIsConfidential] = useState(false);
 
   const [listingTitle, setListingTitle] = useState(''); // Read-only for header context
 
@@ -62,9 +65,18 @@ export const EditBusinessListing: React.FC = () => {
           setAskingPriceUGX(data.askingPriceUGX !== null && data.askingPriceUGX !== undefined ? data.askingPriceUGX.toString() : '');
           setPriceNegotiable(data.priceNegotiable !== false);
           setWhatsIncluded(data.whatsIncluded || []);
-          if (data.photoUrls && Array.isArray(data.photoUrls)) {
-            setPhotoUrlInput(data.photoUrls.join(', '));
+          setIsConfidential(data.isConfidential === true);
+
+          let photos = Array.isArray(data.photoUrls) ? data.photoUrls : [];
+          try {
+            const privateSnap = await getDoc(doc(db, 'businessListingPrivate', id));
+            if (privateSnap.exists() && Array.isArray(privateSnap.data().photoUrls)) {
+              photos = privateSnap.data().photoUrls;
+            }
+          } catch (privateError) {
+            console.warn('Protected business photo metadata was unavailable.', privateError);
           }
+          setExistingPhotoUrls(photos.slice(0, 3));
         } else {
           setToast({ isVisible: true, message: 'Business listing not found.', type: 'error' });
         }
@@ -86,9 +98,34 @@ export const EditBusinessListing: React.FC = () => {
     }
   };
 
+  const handlePhotoFiles = (files: FileList | null) => {
+    if (!files) return;
+    const selected = Array.from(files);
+
+    if (selected.length > 3) {
+      setToast({ isVisible: true, message: 'You can upload a maximum of 3 photos.', type: 'error' });
+      return;
+    }
+
+    const invalid = selected.find(file =>
+      !['image/jpeg', 'image/png'].includes(file.type) || file.size > 5 * 1024 * 1024
+    );
+
+    if (invalid) {
+      setToast({
+        isVisible: true,
+        message: 'Each photo must be a JPG or PNG file no larger than 5MB.',
+        type: 'error'
+      });
+      return;
+    }
+
+    setNewPhotoFiles(selected);
+  };
+
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!id) return;
+    if (!id || !user) return;
 
     if (businessDescription.trim().length < 80) {
       setToast({ isVisible: true, message: 'Description must be at least 80 characters.', type: 'error' });
@@ -102,30 +139,43 @@ export const EditBusinessListing: React.FC = () => {
 
     setIsSaving(true);
     try {
-      // Split user photos by commas
-      let photos: string[] = [];
-      if (photoUrlInput.trim()) {
-        photos = photoUrlInput.split(',').map(s => s.trim()).filter(Boolean);
+      let photos = existingPhotoUrls.slice(0, 3);
+
+      if (newPhotoFiles.length > 0) {
+        const storage = getStorage();
+        photos = [];
+
+        for (let index = 0; index < newPhotoFiles.length; index += 1) {
+          const file = newPhotoFiles[index];
+          const extension = file.type === 'image/png' ? 'png' : 'jpg';
+          const photoRef = ref(storage, `businessPhotos/${user.uid}/${id}/photo_${index + 1}.${extension}`);
+          const uploaded = await uploadBytes(photoRef, file, { contentType: file.type });
+          photos.push(await getDownloadURL(uploaded.ref));
+        }
       }
 
-      const updateData = {
+      const batch = writeBatch(db);
+      batch.update(doc(db, 'businessListings', id), {
         businessDescription: businessDescription.trim(),
         askingPriceUGX: askingPriceUGX.trim() ? Number(askingPriceUGX) : null,
         priceNegotiable,
         whatsIncluded,
-        photoUrls: photos
-      };
+        photoUrls: isConfidential ? [] : photos
+      });
+      batch.set(doc(db, 'businessListingPrivate', id), {
+        sellerUserId: user.uid,
+        photoUrls: photos,
+        updatedAt: serverTimestamp()
+      }, { merge: true });
 
-      await updateDoc(doc(db, 'businessListings', id), updateData);
+      await batch.commit();
 
       setToast({ isVisible: true, message: 'Listing changes saved successfully!', type: 'success' });
-      setTimeout(() => {
-        navigate(`/marketplace/businesses/${id}`);
-      }, 1500);
-
+      setTimeout(() => navigate(`/marketplace/businesses/${id}`), 1000);
     } catch (err) {
       handleFirestoreError(err, OperationType.WRITE, `businessListings/${id}`);
       setToast({ isVisible: true, message: 'Failed to save listing changes.', type: 'error' });
+    } finally {
       setIsSaving(false);
     }
   };
@@ -273,26 +323,35 @@ export const EditBusinessListing: React.FC = () => {
           </div>
         </div>
 
-        {/* 4. Photo Gallery URLs */}
+        {/* 4. Premises Photos */}
         <div className="space-y-4">
           <h3 className="text-sm font-black uppercase text-zinc-400 tracking-widest pb-2 border-b border-zinc-100 flex items-center gap-2">
-            <span className="bg-amber-550 w-5 h-5 rounded-full inline-flex items-center justify-center text-[10px] bg-amber-500 text-white font-extrabold">4</span>
+            <span className="w-5 h-5 rounded-full inline-flex items-center justify-center text-[10px] bg-amber-500 text-white font-extrabold">4</span>
             Premises Photos
           </h3>
 
-          <div>
-            <label className="block text-xs font-bold text-zinc-400 uppercase tracking-widest mb-1 flex items-center gap-1">
-              <ImageIcon size={14} />
-              Photo URLs (Maximum 3 items, comma-separated)
-            </label>
+          <label className="flex items-center justify-center gap-2 min-h-24 border-2 border-dashed border-zinc-200 rounded-2xl bg-zinc-50 cursor-pointer hover:border-amber-400 transition-colors">
+            <UploadCloud size={18} className="text-amber-600" />
+            <span className="text-sm font-bold text-zinc-600">
+              {newPhotoFiles.length > 0 ? `${newPhotoFiles.length} replacement photo(s) selected` : 'Replace listing photos'}
+            </span>
             <input
-              type="text"
-              value={photoUrlInput}
-              onChange={(e) => setPhotoUrlInput(e.target.value)}
-              placeholder="e.g. https://domain.com/photo1.jpg, https://domain.com/photo2.jpg"
-              className="w-full bg-zinc-50 border-none rounded-xl px-4 py-3.5 text-sm font-semibold text-zinc-800 outline-none focus:ring-2 focus:ring-amber-500/20"
+              type="file"
+              accept="image/jpeg,image/png"
+              multiple
+              hidden
+              onChange={e => handlePhotoFiles(e.target.files)}
             />
-          </div>
+          </label>
+          <p className="text-[11px] text-zinc-400">
+            Up to 3 JPG/PNG files, maximum 5MB each. Selecting new photos replaces the current gallery.
+          </p>
+
+          {newPhotoFiles.length === 0 && existingPhotoUrls.length > 0 && (
+            <p className="text-xs font-semibold text-zinc-600">
+              {existingPhotoUrls.length} existing photo(s) will be retained.
+            </p>
+          )}
         </div>
 
         {/* Submit Actions */}

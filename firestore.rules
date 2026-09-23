@@ -139,6 +139,146 @@ service cloud.firestore {
         );
     }
 
+    function currentAccountType() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.accountType;
+    }
+
+    function validJobQuotaAssignment(ownerId, jobId) {
+      let slotKey = request.resource.data.quotaSlot;
+      let slotId = 'job_' + slotKey;
+      return slotKey in ['0', '1', '2', '3', '4']
+        && existsAfter(/databases/$(database)/documents/postingQuotaSlots/$(ownerId)/slots/$(slotId))
+        && getAfter(/databases/$(database)/documents/postingQuotaSlots/$(ownerId)/slots/$(slotId)).data.ownerUserId == ownerId
+        && getAfter(/databases/$(database)/documents/postingQuotaSlots/$(ownerId)/slots/$(slotId)).data.resourceType == 'job'
+        && getAfter(/databases/$(database)/documents/postingQuotaSlots/$(ownerId)/slots/$(slotId)).data.slotKey == slotKey
+        && getAfter(/databases/$(database)/documents/postingQuotaSlots/$(ownerId)/slots/$(slotId)).data.postingId == jobId
+        && getAfter(/databases/$(database)/documents/postingQuotaSlots/$(ownerId)/slots/$(slotId)).data.expiresAt == request.resource.data.expiresAt;
+    }
+
+    function validAvailabilityQuotaAssignment(ownerId, postId) {
+      let slotKey = request.resource.data.quotaSlot;
+      let slotId = 'availability_' + slotKey;
+      return slotKey == '0'
+        && existsAfter(/databases/$(database)/documents/postingQuotaSlots/$(ownerId)/slots/$(slotId))
+        && getAfter(/databases/$(database)/documents/postingQuotaSlots/$(ownerId)/slots/$(slotId)).data.ownerUserId == ownerId
+        && getAfter(/databases/$(database)/documents/postingQuotaSlots/$(ownerId)/slots/$(slotId)).data.resourceType == 'availability'
+        && getAfter(/databases/$(database)/documents/postingQuotaSlots/$(ownerId)/slots/$(slotId)).data.slotKey == slotKey
+        && getAfter(/databases/$(database)/documents/postingQuotaSlots/$(ownerId)/slots/$(slotId)).data.postingId == postId
+        && getAfter(/databases/$(database)/documents/postingQuotaSlots/$(ownerId)/slots/$(slotId)).data.expiresAt == request.resource.data.expiresAt;
+    }
+
+    function validBusinessQuotaAssignment(ownerId, listingId) {
+      let slotKey = request.resource.data.quotaSlot;
+      let slotId = 'business_' + slotKey;
+      return slotKey in ['0', '1', '2']
+        && existsAfter(/databases/$(database)/documents/postingQuotaSlots/$(ownerId)/slots/$(slotId))
+        && getAfter(/databases/$(database)/documents/postingQuotaSlots/$(ownerId)/slots/$(slotId)).data.ownerUserId == ownerId
+        && getAfter(/databases/$(database)/documents/postingQuotaSlots/$(ownerId)/slots/$(slotId)).data.resourceType == 'business'
+        && getAfter(/databases/$(database)/documents/postingQuotaSlots/$(ownerId)/slots/$(slotId)).data.slotKey == slotKey
+        && getAfter(/databases/$(database)/documents/postingQuotaSlots/$(ownerId)/slots/$(slotId)).data.postingId == listingId
+        && getAfter(/databases/$(database)/documents/postingQuotaSlots/$(ownerId)/slots/$(slotId)).data.expiresAt == request.resource.data.expiresAt;
+    }
+
+    function previousQuotaTargetIsReusable() {
+      let targetId = resource.data.postingId;
+      return (
+          resource.data.resourceType == 'job'
+          && (
+            !exists(/databases/$(database)/documents/jobPostings/$(targetId))
+            || get(/databases/$(database)/documents/jobPostings/$(targetId)).data.status != 'active'
+            || get(/databases/$(database)/documents/jobPostings/$(targetId)).data.expiresAt <= request.time
+          )
+        )
+        || (
+          resource.data.resourceType == 'availability'
+          && (
+            !exists(/databases/$(database)/documents/availabilityPosts/$(targetId))
+            || get(/databases/$(database)/documents/availabilityPosts/$(targetId)).data.status != 'active'
+            || get(/databases/$(database)/documents/availabilityPosts/$(targetId)).data.expiresAt <= request.time
+          )
+        )
+        || (
+          resource.data.resourceType == 'business'
+          && (
+            !exists(/databases/$(database)/documents/businessListings/$(targetId))
+            || get(/databases/$(database)/documents/businessListings/$(targetId)).data.status != 'active'
+            || get(/databases/$(database)/documents/businessListings/$(targetId)).data.expiresAt <= request.time
+          )
+        );
+    }
+
+    function quotaSlotPayloadIsValid(ownerId, slotId) {
+      let type = request.resource.data.resourceType;
+      let slotKey = request.resource.data.slotKey;
+      let postingId = request.resource.data.postingId;
+      return request.resource.data.keys().hasOnly([
+          'ownerUserId',
+          'resourceType',
+          'slotKey',
+          'postingId',
+          'expiresAt',
+          'updatedAt'
+        ])
+        && request.resource.data.ownerUserId == ownerId
+        && (
+          (
+            type == 'job'
+            && slotKey in ['0', '1', '2', '3', '4']
+            && slotId == 'job_' + slotKey
+            && existsAfter(/databases/$(database)/documents/jobPostings/$(postingId))
+            && getAfter(/databases/$(database)/documents/jobPostings/$(postingId)).data.organisationUserId == ownerId
+            && getAfter(/databases/$(database)/documents/jobPostings/$(postingId)).data.quotaSlot == slotKey
+            && getAfter(/databases/$(database)/documents/jobPostings/$(postingId)).data.status == 'active'
+            && getAfter(/databases/$(database)/documents/jobPostings/$(postingId)).data.expiresAt > request.time
+            && request.resource.data.expiresAt == getAfter(/databases/$(database)/documents/jobPostings/$(postingId)).data.expiresAt
+          )
+          || (
+            type == 'availability'
+            && slotKey == '0'
+            && slotId == 'availability_' + slotKey
+            && existsAfter(/databases/$(database)/documents/availabilityPosts/$(postingId))
+            && getAfter(/databases/$(database)/documents/availabilityPosts/$(postingId)).data.individualUserId == ownerId
+            && getAfter(/databases/$(database)/documents/availabilityPosts/$(postingId)).data.quotaSlot == slotKey
+            && getAfter(/databases/$(database)/documents/availabilityPosts/$(postingId)).data.status == 'active'
+            && getAfter(/databases/$(database)/documents/availabilityPosts/$(postingId)).data.expiresAt > request.time
+            && request.resource.data.expiresAt == getAfter(/databases/$(database)/documents/availabilityPosts/$(postingId)).data.expiresAt
+          )
+          || (
+            type == 'business'
+            && slotKey in ['0', '1', '2']
+            && slotId == 'business_' + slotKey
+            && existsAfter(/databases/$(database)/documents/businessListings/$(postingId))
+            && getAfter(/databases/$(database)/documents/businessListings/$(postingId)).data.sellerUserId == ownerId
+            && getAfter(/databases/$(database)/documents/businessListings/$(postingId)).data.quotaSlot == slotKey
+            && getAfter(/databases/$(database)/documents/businessListings/$(postingId)).data.status == 'active'
+            && getAfter(/databases/$(database)/documents/businessListings/$(postingId)).data.expiresAt > request.time
+            && request.resource.data.expiresAt == getAfter(/databases/$(database)/documents/businessListings/$(postingId)).data.expiresAt
+          )
+        );
+    }
+
+    function validJobInterestIncrement(jobId) {
+      let eventId = 'job_interest__' + jobId + '__' + request.auth.uid;
+      return isActiveMember()
+        && currentAccountType() == 'individual'
+        && request.resource.data.organisationUserId == resource.data.organisationUserId
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['interestCount'])
+        && request.resource.data.interestCount == resource.data.interestCount + 1
+        && !exists(/databases/$(database)/documents/interestEvents/$(eventId))
+        && existsAfter(/databases/$(database)/documents/interestEvents/$(eventId));
+    }
+
+    function validAvailabilityInterestIncrement(postId) {
+      let eventId = 'availability_interest__' + postId + '__' + request.auth.uid;
+      return isActiveMember()
+        && currentAccountType() == 'organisation'
+        && request.resource.data.individualUserId == resource.data.individualUserId
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['interestCount'])
+        && request.resource.data.interestCount == resource.data.interestCount + 1
+        && !exists(/databases/$(database)/documents/interestEvents/$(eventId))
+        && existsAfter(/databases/$(database)/documents/interestEvents/$(eventId));
+    }
+
     function professionalVerificationFieldsUnchanged() {
       return !request.resource.data.diff(resource.data).affectedKeys().hasAny([
         'credentialVerificationStatus',
@@ -342,45 +482,171 @@ service cloud.firestore {
     }
 
     match /jobPostings/{jobId} {
-      allow read: if isActiveMember() || isAdmin();
+      allow get: if isAdmin()
+        || (
+          isActiveMember()
+          && (
+            resource.data.organisationUserId == request.auth.uid
+            || (
+              resource.data.status == 'active'
+              && resource.data.expiresAt > request.time
+            )
+          )
+        );
+      allow list: if isAdmin();
+      allow list: if isActiveMember()
+        && resource.data.organisationUserId == request.auth.uid;
+      // Firestore list rules cannot safely prove a client-side clock value against request.time.
+      // Browse queries still filter expiresAt; list authorization therefore enforces status,
+      // while direct document reads enforce both status and wall-clock expiry.
+      allow list: if isActiveMember()
+        && resource.data.status == 'active';
       allow create: if isActiveMember()
         && request.resource.data.organisationUserId == request.auth.uid
-        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.accountType == 'organisation';
-      allow update: if isSignedIn() && (
-        (
-          (resource.data.organisationUserId == request.auth.uid || isAdmin())
-          && request.resource.data.organisationUserId == resource.data.organisationUserId
-        )
+        && currentAccountType() == 'organisation'
+        && request.resource.data.status == 'active'
+        && request.resource.data.interestCount == 0
+        && request.resource.data.expiresAt > request.time
+        && request.resource.data.expiresAt <= request.time + duration.value(60, 'd')
+        && validJobQuotaAssignment(request.auth.uid, jobId);
+      allow update: if isAdmin()
         || (
-          request.resource.data.organisationUserId == resource.data.organisationUserId
-          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['interestCount'])
-          && request.resource.data.interestCount == resource.data.interestCount + 1
+          isActiveMember()
+          && resource.data.organisationUserId == request.auth.uid
+          && request.resource.data.organisationUserId == resource.data.organisationUserId
+          && request.resource.data.createdAt == resource.data.createdAt
+          && request.resource.data.interestCount == resource.data.interestCount
+          && request.resource.data.status in ['active', 'closed', 'expired']
+          && !(resource.data.status == 'closed' && request.resource.data.status == 'active')
+          && request.resource.data.expiresAt <= request.time + duration.value(60, 'd')
+          && (
+            request.resource.data.expiresAt == resource.data.expiresAt
+            || (
+              resource.data.expiresAt <= request.time
+              && request.resource.data.status == 'active'
+              && request.resource.data.expiresAt > request.time
+              && validJobQuotaAssignment(request.auth.uid, jobId)
+            )
+          )
+          && (
+            (
+              !('quotaSlot' in resource.data)
+              && !('quotaSlot' in request.resource.data)
+            )
+            || (
+              ('quotaSlot' in resource.data)
+              && ('quotaSlot' in request.resource.data)
+              && request.resource.data.quotaSlot == resource.data.quotaSlot
+            )
+            || (
+              resource.data.expiresAt <= request.time
+              && validJobQuotaAssignment(request.auth.uid, jobId)
+            )
+          )
         )
-      );
-      allow delete: if isSignedIn() && (resource.data.organisationUserId == request.auth.uid || isAdmin());
+        || validJobInterestIncrement(jobId);
+      allow delete: if isAdmin()
+        || (
+          isActiveMember()
+          && resource.data.organisationUserId == request.auth.uid
+        );
     }
 
     match /availabilityPosts/{postId} {
-      allow read: if isActiveMember() || isAdmin();
+      allow get: if isAdmin()
+        || (
+          isActiveMember()
+          && (
+            resource.data.individualUserId == request.auth.uid
+            || (
+              resource.data.status == 'active'
+              && resource.data.expiresAt > request.time
+            )
+          )
+        );
+      allow list: if isAdmin();
+      allow list: if isActiveMember()
+        && resource.data.individualUserId == request.auth.uid;
+      allow list: if isActiveMember()
+        && resource.data.status == 'active';
       allow create: if isActiveMember()
         && request.resource.data.individualUserId == request.auth.uid
-        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.accountType == 'individual';
-      allow update: if isSignedIn() && (
-        (
-          (resource.data.individualUserId == request.auth.uid || isAdmin())
-          && request.resource.data.individualUserId == resource.data.individualUserId
-        )
+        && currentAccountType() == 'individual'
+        && request.resource.data.status == 'active'
+        && request.resource.data.interestCount == 0
+        && request.resource.data.expiresAt > request.time
+        && request.resource.data.expiresAt <= request.time + duration.value(60, 'd')
+        && validAvailabilityQuotaAssignment(request.auth.uid, postId);
+      allow update: if isAdmin()
         || (
-          request.resource.data.individualUserId == resource.data.individualUserId
-          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['interestCount'])
-          && request.resource.data.interestCount == resource.data.interestCount + 1
+          isActiveMember()
+          && resource.data.individualUserId == request.auth.uid
+          && request.resource.data.individualUserId == resource.data.individualUserId
+          && request.resource.data.createdAt == resource.data.createdAt
+          && request.resource.data.interestCount == resource.data.interestCount
+          && request.resource.data.status in ['active', 'closed', 'expired']
+          && !(resource.data.status == 'closed' && request.resource.data.status == 'active')
+          && request.resource.data.expiresAt <= request.time + duration.value(60, 'd')
+          && (
+            request.resource.data.expiresAt == resource.data.expiresAt
+            || (
+              resource.data.expiresAt <= request.time
+              && request.resource.data.status == 'active'
+              && request.resource.data.expiresAt > request.time
+              && validAvailabilityQuotaAssignment(request.auth.uid, postId)
+            )
+          )
+          && (
+            (
+              !('quotaSlot' in resource.data)
+              && !('quotaSlot' in request.resource.data)
+            )
+            || (
+              ('quotaSlot' in resource.data)
+              && ('quotaSlot' in request.resource.data)
+              && request.resource.data.quotaSlot == resource.data.quotaSlot
+            )
+            || (
+              resource.data.expiresAt <= request.time
+              && validAvailabilityQuotaAssignment(request.auth.uid, postId)
+            )
+          )
         )
-      );
-      allow delete: if isSignedIn() && (resource.data.individualUserId == request.auth.uid || isAdmin());
+        || validAvailabilityInterestIncrement(postId);
+      allow delete: if isAdmin()
+        || (
+          isActiveMember()
+          && resource.data.individualUserId == request.auth.uid
+        );
     }
 
     match /interestEvents/{eventId} {
-      allow create: if isActiveMember() && request.resource.data.actorId == request.auth.uid;
+      allow create: if isActiveMember()
+        && request.resource.data.actorId == request.auth.uid
+        && request.resource.data.keys().hasOnly([
+          'actorId',
+          'targetId',
+          'type',
+          'timestamp'
+        ])
+        && (
+          (
+            request.resource.data.type == 'job_interest'
+            && currentAccountType() == 'individual'
+            && eventId == 'job_interest__' + request.resource.data.targetId + '__' + request.auth.uid
+            && exists(/databases/$(database)/documents/jobPostings/$(request.resource.data.targetId))
+            && get(/databases/$(database)/documents/jobPostings/$(request.resource.data.targetId)).data.status == 'active'
+            && get(/databases/$(database)/documents/jobPostings/$(request.resource.data.targetId)).data.expiresAt > request.time
+          )
+          || (
+            request.resource.data.type == 'availability_interest'
+            && currentAccountType() == 'organisation'
+            && eventId == 'availability_interest__' + request.resource.data.targetId + '__' + request.auth.uid
+            && exists(/databases/$(database)/documents/availabilityPosts/$(request.resource.data.targetId))
+            && get(/databases/$(database)/documents/availabilityPosts/$(request.resource.data.targetId)).data.status == 'active'
+            && get(/databases/$(database)/documents/availabilityPosts/$(request.resource.data.targetId)).data.expiresAt > request.time
+          )
+        );
       allow read: if isActiveMember() && resource.data.actorId == request.auth.uid;
       allow update, delete: if isAdmin();
     }
@@ -396,12 +662,143 @@ service cloud.firestore {
     }
 
     match /businessListings/{listingId} {
-      allow read: if isActiveMember() || isAdmin();
-      allow create: if isActiveMember() && request.resource.data.sellerUserId == request.auth.uid;
-      allow update: if isSignedIn()
-        && (resource.data.sellerUserId == request.auth.uid || isAdmin())
-        && request.resource.data.sellerUserId == resource.data.sellerUserId;
-      allow delete: if isSignedIn() && (resource.data.sellerUserId == request.auth.uid || isAdmin());
+      allow get: if isAdmin()
+        || (
+          isActiveMember()
+          && (
+            resource.data.sellerUserId == request.auth.uid
+            || (
+              resource.data.status in ['active', 'under_offer']
+              && resource.data.expiresAt > request.time
+            )
+          )
+        );
+      allow list: if isAdmin();
+      allow list: if isActiveMember()
+        && resource.data.sellerUserId == request.auth.uid;
+      allow list: if isActiveMember()
+        && resource.data.status == 'active';
+      allow list: if isActiveMember()
+        && resource.data.status == 'under_offer';
+      allow create: if isActiveMember()
+        && request.resource.data.sellerUserId == request.auth.uid
+        && request.resource.data.photoUrls is list
+        && request.resource.data.photoUrls.size() <= 3
+        && request.resource.data.status == 'active'
+        && request.resource.data.viewCount == 0
+        && request.resource.data.expiresAt > request.time
+        && request.resource.data.expiresAt <= request.time + duration.value(90, 'd')
+        && validBusinessQuotaAssignment(request.auth.uid, listingId);
+      allow update: if isAdmin()
+        || (
+          isActiveMember()
+          && resource.data.sellerUserId == request.auth.uid
+          && request.resource.data.sellerUserId == resource.data.sellerUserId
+          && request.resource.data.createdAt == resource.data.createdAt
+          && request.resource.data.viewCount == resource.data.viewCount
+          && request.resource.data.photoUrls is list
+          && request.resource.data.photoUrls.size() <= 3
+          && request.resource.data.status in ['active', 'under_offer', 'sold', 'withdrawn']
+          && (
+            request.resource.data.status == resource.data.status
+            || (
+              resource.data.status == 'active'
+              && request.resource.data.status in ['under_offer', 'sold', 'withdrawn']
+            )
+            || (
+              resource.data.status == 'under_offer'
+              && request.resource.data.status in ['sold', 'withdrawn']
+            )
+          )
+          && request.resource.data.expiresAt <= request.time + duration.value(90, 'd')
+          && (
+            request.resource.data.expiresAt == resource.data.expiresAt
+            || (
+              resource.data.status == 'active'
+              && request.resource.data.status == 'active'
+              && resource.data.expiresAt <= request.time + duration.value(14, 'd')
+              && request.resource.data.expiresAt > request.time
+              && validBusinessQuotaAssignment(request.auth.uid, listingId)
+            )
+          )
+          && (
+            (
+              !('quotaSlot' in resource.data)
+              && !('quotaSlot' in request.resource.data)
+            )
+            || (
+              ('quotaSlot' in resource.data)
+              && ('quotaSlot' in request.resource.data)
+              && request.resource.data.quotaSlot == resource.data.quotaSlot
+            )
+            || (
+              resource.data.status == 'active'
+              && resource.data.expiresAt <= request.time + duration.value(14, 'd')
+              && validBusinessQuotaAssignment(request.auth.uid, listingId)
+            )
+          )
+        );
+      allow delete: if isAdmin()
+        || (
+          isActiveMember()
+          && resource.data.sellerUserId == request.auth.uid
+        );
+    }
+
+    match /postingQuotaSlots/{ownerId}/slots/{slotId} {
+      allow read: if isAdmin()
+        || (
+          isActiveMember()
+          && request.auth.uid == ownerId
+        );
+
+      allow create: if isActiveMember()
+        && request.auth.uid == ownerId
+        && quotaSlotPayloadIsValid(ownerId, slotId);
+
+      allow update: if isActiveMember()
+        && request.auth.uid == ownerId
+        && request.resource.data.ownerUserId == resource.data.ownerUserId
+        && request.resource.data.resourceType == resource.data.resourceType
+        && request.resource.data.slotKey == resource.data.slotKey
+        && (
+          request.resource.data.postingId == resource.data.postingId
+          || previousQuotaTargetIsReusable()
+        )
+        && quotaSlotPayloadIsValid(ownerId, slotId);
+
+      allow delete: if isAdmin();
+    }
+
+    match /businessListingPrivate/{listingId} {
+      allow read: if isAdmin()
+        || (
+          isActiveMember()
+          && resource.data.sellerUserId == request.auth.uid
+        )
+        || (
+          isActiveMember()
+          && exists(/databases/$(database)/documents/businessListings/$(listingId))
+          && get(/databases/$(database)/documents/businessListings/$(listingId)).data.isConfidential == false
+          && get(/databases/$(database)/documents/businessListings/$(listingId)).data.status in ['active', 'under_offer']
+          && get(/databases/$(database)/documents/businessListings/$(listingId)).data.expiresAt > request.time
+        );
+
+      allow create: if isActiveMember()
+        && request.resource.data.sellerUserId == request.auth.uid;
+
+      allow update: if isAdmin()
+        || (
+          isActiveMember()
+          && resource.data.sellerUserId == request.auth.uid
+          && request.resource.data.sellerUserId == resource.data.sellerUserId
+        );
+
+      allow delete: if isAdmin()
+        || (
+          isActiveMember()
+          && resource.data.sellerUserId == request.auth.uid
+        );
     }
 
     match /messages/{conversationId} {

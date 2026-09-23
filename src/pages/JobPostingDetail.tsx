@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { db } from '../lib/firebase';
-import { doc, getDoc, updateDoc, increment, collection, addDoc, query, where, getDocs, Timestamp } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, increment, collection, query, where, getDocs, Timestamp, runTransaction } from 'firebase/firestore';
 import { Button } from '../components/Button';
 import { JobPosting } from '../types';
 import { Toast, ToastType } from '../components/Toast';
@@ -61,7 +61,8 @@ const JobPostingDetail: React.FC = () => {
         const q = query(
           collection(db, 'jobPostings'),
           where('cadreRequired', '==', cadre),
-          where('status', '==', 'active')
+          where('status', '==', 'active'),
+          where('expiresAt', '>', Timestamp.now())
         );
         const snap = await getDocs(q);
         const data = snap.docs
@@ -76,13 +77,9 @@ const JobPostingDetail: React.FC = () => {
 
     const checkInterest = async () => {
       if (!user || userAccount?.accountType !== 'individual' || !postingId) return;
-      const q = query(
-        collection(db, 'interestEvents'),
-        where('actorId', '==', user.uid),
-        where('targetId', '==', postingId)
-      );
-      const snap = await getDocs(q);
-      setHasInterest(!snap.empty);
+      const eventId = `job_interest__${postingId}__${user.uid}`;
+      const snap = await getDoc(doc(db, 'interestEvents', eventId));
+      setHasInterest(snap.exists());
     };
 
     fetchJob();
@@ -90,26 +87,39 @@ const JobPostingDetail: React.FC = () => {
   }, [postingId, user, userAccount]);
 
   const handleInterest = async () => {
-    if (!job || !user || hasInterest) return;
+    if (!job || !user || hasInterest || !job.id) return;
 
     try {
-      // 1. Log interest event
-      await addDoc(collection(db, 'interestEvents'), {
-        actorId: user.uid,
-        targetId: job.id,
-        type: 'job_interest',
-        timestamp: Timestamp.now()
-      });
+      const eventId = `job_interest__${job.id}__${user.uid}`;
+      const eventRef = doc(db, 'interestEvents', eventId);
+      const jobRef = doc(db, 'jobPostings', job.id);
 
-      // 2. Increment count
-      await updateDoc(doc(db, 'jobPostings', job.id!), {
-        interestCount: increment(1)
+      const created = await runTransaction(db, async transaction => {
+        const existingInterest = await transaction.get(eventRef);
+        if (existingInterest.exists()) return false;
+
+        transaction.set(eventRef, {
+          actorId: user.uid,
+          targetId: job.id,
+          type: 'job_interest',
+          timestamp: Timestamp.now()
+        });
+
+        transaction.update(jobRef, {
+          interestCount: increment(1)
+        });
+
+        return true;
       });
 
       setHasInterest(true);
-      setToast({ isVisible: true, message: 'Expression of interest logged.', type: 'success' });
+      setToast({
+        isVisible: true,
+        message: created ? 'Expression of interest logged.' : 'Interest was already recorded.',
+        type: 'success'
+      });
 
-      // 3. Open contact link
+      // Open contact link
       const message = encodeURIComponent(`Hello, I saw your job posting for "${job.title}" on PharmaNetwork Uganda and am interested in applying. My name is ${(profile as any)?.fullName || 'a professional'}.`);
       if (job.contactMethod === 'whatsapp') {
         const phone = job.contactDetail.replace(/\D/g, '');
@@ -141,7 +151,11 @@ const JobPostingDetail: React.FC = () => {
     </div>
   );
 
-  if (!job || job.status !== 'active') return (
+  const jobExpired = !!job?.expiresAt
+    && (job.expiresAt.toMillis ? job.expiresAt.toMillis() : new Date(job.expiresAt).getTime()) <= Date.now();
+  const isOwner = !!job && user?.uid === job.organisationUserId;
+
+  if (!job || (!isOwner && (job.status !== 'active' || jobExpired))) return (
     <div className="max-w-2xl mx-auto px-4 py-20 text-center">
       <div className="w-16 h-16 bg-zinc-50 rounded-2xl flex items-center justify-center text-zinc-300 mx-auto mb-6">
         <AlertCircle size={32} />
@@ -151,7 +165,6 @@ const JobPostingDetail: React.FC = () => {
     </div>
   );
 
-  const isOwner = user?.uid === job.organisationUserId;
   const formatDate = (ts: any) => ts?.toDate().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 
   return (
@@ -270,13 +283,26 @@ const JobPostingDetail: React.FC = () => {
               ) : isOwner ? (
                 <div className="space-y-4">
                    <p className="text-xs font-bold text-zinc-400 uppercase tracking-widest text-center">Your Posting</p>
-                   <Button variant="outline" fullWidth onClick={() => navigate(`/jobs/${job.id}/edit`)}>Edit Posting</Button>
-                   <button 
-                     onClick={handleClosePosting}
-                     className="w-full py-3 rounded-xl border border-red-200 text-red-600 font-bold text-sm hover:bg-red-50 transition-colors"
-                   >
-                     Close Posting
-                   </button>
+                   {job.status === 'active' && !jobExpired ? (
+                     <>
+                       <Button variant="outline" fullWidth onClick={() => navigate(`/jobs/${job.id}/edit`)}>Edit Posting</Button>
+                       <button 
+                         onClick={handleClosePosting}
+                         className="w-full py-3 rounded-xl border border-red-200 text-red-600 font-bold text-sm hover:bg-red-50 transition-colors"
+                       >
+                         Close Posting
+                       </button>
+                     </>
+                   ) : (
+                     <div className="rounded-xl bg-zinc-50 border border-zinc-100 p-4 text-center">
+                       <p className="text-xs font-bold text-zinc-700">
+                         {job.status === 'closed' ? 'This posting is closed.' : 'This posting has expired.'}
+                       </p>
+                       <Link to="/my-postings" className="text-[10px] text-primary font-bold uppercase tracking-widest mt-2 inline-block">
+                         Manage My Postings
+                       </Link>
+                     </div>
+                   )}
                 </div>
               ) : userAccount?.accountType === 'organisation' ? (
                 <div className="bg-zinc-50 p-6 rounded-2xl text-center">

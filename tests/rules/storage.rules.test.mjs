@@ -4,7 +4,7 @@ import {
   assertSucceeds,
   initializeTestEnvironment
 } from '@firebase/rules-unit-testing';
-import { doc, setDoc } from 'firebase/firestore';
+import { doc, setDoc, Timestamp } from 'firebase/firestore';
 import {
   getBytes,
   ref,
@@ -207,4 +207,96 @@ test('scoped authority admin can read verification evidence only for governed ca
 
   await assertSucceeds(getBytes(ref(authorityStorage, 'verificationDocs/pharmacist-owner/registration_certificate')));
   await assertFails(getBytes(ref(authorityStorage, 'verificationDocs/technician-owner/registration_certificate')));
+});
+
+
+test('business photos are readable by active members only for non-confidential active listings', async () => {
+  await seedFirestore(async db => {
+    for (const uid of ['photo-seller-public', 'photo-seller-private', 'photo-reader']) {
+      await setDoc(doc(db, 'users', uid), {
+        id: uid,
+        accountType: 'individual',
+        accountClass: 'professional',
+        accountStatus: 'ACTIVE',
+        isActive: true,
+        isVerified: true
+      });
+    }
+
+    const futureExpiry = Timestamp.fromMillis(Date.now() + 24 * 60 * 60 * 1000);
+    await setDoc(doc(db, 'businessListings', 'public-listing'), {
+      sellerUserId: 'photo-seller-public',
+      isConfidential: false,
+      status: 'active',
+      expiresAt: futureExpiry,
+      photoUrls: []
+    });
+    await setDoc(doc(db, 'businessListings', 'private-listing'), {
+      sellerUserId: 'photo-seller-private',
+      isConfidential: true,
+      status: 'active',
+      expiresAt: futureExpiry,
+      photoUrls: []
+    });
+  });
+
+  const publicOwnerStorage = testEnv.authenticatedContext('photo-seller-public').storage();
+  const privateOwnerStorage = testEnv.authenticatedContext('photo-seller-private').storage();
+
+  await assertSucceeds(uploadBytes(
+    ref(publicOwnerStorage, 'businessPhotos/photo-seller-public/public-listing/photo_1.jpg'),
+    new Uint8Array([1, 2, 3]),
+    { contentType: 'image/jpeg' }
+  ));
+  await assertSucceeds(uploadBytes(
+    ref(privateOwnerStorage, 'businessPhotos/photo-seller-private/private-listing/photo_1.jpg'),
+    new Uint8Array([1, 2, 3]),
+    { contentType: 'image/jpeg' }
+  ));
+
+  const readerStorage = testEnv.authenticatedContext('photo-reader').storage();
+
+  await assertSucceeds(getBytes(
+    ref(readerStorage, 'businessPhotos/photo-seller-public/public-listing/photo_1.jpg')
+  ));
+  await assertFails(getBytes(
+    ref(readerStorage, 'businessPhotos/photo-seller-private/private-listing/photo_1.jpg')
+  ));
+});
+
+
+test('expired non-confidential business photos are hidden from other members', async () => {
+  await seedFirestore(async db => {
+    for (const uid of ['expired-photo-owner', 'expired-photo-reader']) {
+      await setDoc(doc(db, 'users', uid), {
+        id: uid,
+        accountType: 'individual',
+        accountClass: 'professional',
+        accountStatus: 'ACTIVE',
+        isActive: true,
+        isVerified: true
+      });
+    }
+
+    await setDoc(doc(db, 'businessListings', 'expired-photo-listing'), {
+      sellerUserId: 'expired-photo-owner',
+      isConfidential: false,
+      status: 'active',
+      expiresAt: Timestamp.fromMillis(Date.now() - 60 * 1000),
+      photoUrls: []
+    });
+  });
+
+  const ownerStorage = testEnv.authenticatedContext('expired-photo-owner').storage();
+  const path = 'businessPhotos/expired-photo-owner/expired-photo-listing/photo_1.jpg';
+
+  await assertSucceeds(uploadBytes(
+    ref(ownerStorage, path),
+    new Uint8Array([1, 2, 3]),
+    { contentType: 'image/jpeg' }
+  ));
+
+  const readerStorage = testEnv.authenticatedContext('expired-photo-reader').storage();
+  await assertFails(getBytes(ref(readerStorage, path)));
+  await assertSucceeds(getBytes(ref(ownerStorage, path)));
 });

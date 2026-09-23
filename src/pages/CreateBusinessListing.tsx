@@ -1,13 +1,15 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
-import { collection, addDoc, Timestamp } from 'firebase/firestore';
+import { collection, doc, getDocs, query, Timestamp, where } from 'firebase/firestore';
 import { Button } from '../components/Button';
 import { UGANDA_DISTRICTS, CONTACT_METHODS } from '../constants';
 import { Toast, ToastType } from '../components/Toast';
-import { Store, EyeOff, ShieldCheck, ChevronRight, HelpCircle, Info, Image as ImageIcon } from 'lucide-react';
+import { Store, EyeOff, ShieldCheck, ChevronRight, HelpCircle, Info, Image as ImageIcon, UploadCloud, X } from 'lucide-react';
 import { motion } from 'motion/react';
+import { deleteObject, getDownloadURL, getStorage, ref, uploadBytes, type StorageReference } from 'firebase/storage';
+import { createPostingWithQuota, PostingQuotaExceededError } from '../lib/postingQuota';
 
 const WHAT_IS_INCLUDED_OPTIONS = [
   { id: 'inventory', label: 'Inventory / Stock' },
@@ -15,7 +17,7 @@ const WHAT_IS_INCLUDED_OPTIONS = [
   { id: 'pharmacy_software', label: 'Pharmacy Software System' },
   { id: 'supplier_relationships', label: 'Supplier / Distributor Contracts' },
   { id: 'client_base', label: 'Established Client / Patient Base' },
-  { id: 'nda_licence', label: 'NDA Licence / Approvals' },
+  { id: 'nda_licence', label: 'Regulatory Licence / Approvals' },
   { id: 'lease_agreement', label: 'Premises Lease Agreement' },
   { id: 'staff', label: 'Trained staff willing to stay' }
 ];
@@ -43,18 +45,64 @@ export const CreateBusinessListing: React.FC = () => {
     reasonForSale: 'prefer_not_to_say',
     contactMethod: 'whatsapp',
     contactDetail: '',
-    contactName: '',
-    photoUrlInput: ''
+    contactName: ''
   });
 
   const [whatsIncluded, setWhatsIncluded] = useState<string[]>([]);
+  const [photoFiles, setPhotoFiles] = useState<File[]>([]);
+  const [activeListingCount, setActiveListingCount] = useState(0);
 
-  // Sample placeholder generic farm/pharma stock images to populate listing default photos
-  const SAMPLE_IMAGES = [
-    "https://images.unsplash.com/photo-1576091160550-2173dba999ef?auto=format&fit=crop&w=800&q=80", // clinical pharma shelf
-    "https://images.unsplash.com/photo-1587854692152-cbe660dbde88?auto=format&fit=crop&w=800&q=80", // medicine pills pack
-    "https://images.unsplash.com/photo-1607619056574-7b8d304f3c6f?auto=format&fit=crop&w=800&q=80"  // pharmacyshop
-  ];
+  useEffect(() => {
+    const loadActiveListingCount = async () => {
+      if (!user) return;
+
+      try {
+        const listingsQuery = query(
+          collection(db, 'businessListings'),
+          where('sellerUserId', '==', user.uid),
+          where('status', '==', 'active')
+        );
+        const snap = await getDocs(listingsQuery);
+        const now = Date.now();
+        const count = snap.docs.filter(listingDoc => {
+          const expiresAt = listingDoc.data().expiresAt;
+          if (!expiresAt) return false;
+          const expiresMillis = expiresAt.toMillis ? expiresAt.toMillis() : new Date(expiresAt).getTime();
+          return expiresMillis > now;
+        }).length;
+        setActiveListingCount(count);
+      } catch (error) {
+        console.error('Failed to count active business listings:', error);
+      }
+    };
+
+    loadActiveListingCount();
+  }, [user]);
+
+  const handlePhotoFiles = (files: FileList | null) => {
+    if (!files) return;
+    const selected = Array.from(files);
+
+    if (selected.length > 3) {
+      setToast({ isVisible: true, message: 'You can upload a maximum of 3 photos.', type: 'error' });
+      return;
+    }
+
+    const invalid = selected.find(file =>
+      !['image/jpeg', 'image/png'].includes(file.type) || file.size > 5 * 1024 * 1024
+    );
+
+    if (invalid) {
+      setToast({
+        isVisible: true,
+        message: 'Each photo must be a JPG or PNG file no larger than 5MB.',
+        type: 'error'
+      });
+      return;
+    }
+
+    setPhotoFiles(selected);
+  };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value, type } = e.target;
@@ -76,63 +124,108 @@ export const CreateBusinessListing: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
     if (!user) {
-      setToast({ isVisible: true, message: 'Please log in to submit a listing', type: 'error' });
+      setToast({ isVisible: true, message: 'Please log in to submit a listing.', type: 'error' });
+      return;
+    }
+
+    if (activeListingCount >= 3) {
+      setToast({
+        isVisible: true,
+        message: 'You already have 3 active business listings. Close, sell, or withdraw one before creating another.',
+        type: 'error'
+      });
       return;
     }
 
     if (!formData.listingTitle.trim()) {
-      setToast({ isVisible: true, message: 'Please enter a title for your listing', type: 'error' });
+      setToast({ isVisible: true, message: 'Please enter a title for your listing.', type: 'error' });
+      return;
+    }
+
+    if (formData.businessDescription.trim().length < 80) {
+      setToast({ isVisible: true, message: 'Business description must be at least 80 characters.', type: 'error' });
       return;
     }
 
     setIsSubmitting(true);
+    const uploadedPhotoRefs: StorageReference[] = [];
 
     try {
-      // Split user photos by commas or fallback to sample images
-      let photos: string[] = [];
-      if (formData.photoUrlInput.trim()) {
-        photos = formData.photoUrlInput.split(',').map(s => s.trim()).filter(Boolean);
-      } else {
-        photos = [SAMPLE_IMAGES[Math.floor(Math.random() * SAMPLE_IMAGES.length)]];
+      const listingRef = doc(collection(db, 'businessListings'));
+      const storage = getStorage();
+      const photoUrls: string[] = [];
+
+      for (let index = 0; index < photoFiles.length; index += 1) {
+        const file = photoFiles[index];
+        const extension = file.type === 'image/png' ? 'png' : 'jpg';
+        const photoRef = ref(storage, `businessPhotos/${user.uid}/${listingRef.id}/photo_${index + 1}.${extension}`);
+        const uploaded = await uploadBytes(photoRef, file, { contentType: file.type });
+        uploadedPhotoRefs.push(uploaded.ref);
+        photoUrls.push(await getDownloadURL(uploaded.ref));
       }
 
-      const listingData = {
+      const now = Timestamp.now();
+      const publicListing = {
         sellerUserId: user.uid,
         listingTitle: formData.listingTitle.trim(),
         isConfidential: formData.isConfidential,
         businessType: formData.businessType,
         district: formData.district,
-        locationDescription: formData.locationDescription.trim(),
         yearsInOperation: Number(formData.yearsInOperation) || 0,
-        ndaLicenceStatus: formData.ndaLicenceStatus,
         staffCount: Number(formData.staffCount) || 0,
         businessDescription: formData.businessDescription.trim(),
-        askingPriceUGX: formData.askingPriceUGX ? Number(formData.AskingPriceUGX || formData.askingPriceUGX) : null,
+        askingPriceUGX: formData.askingPriceUGX ? Number(formData.askingPriceUGX) : null,
         priceNegotiable: formData.priceNegotiable,
         monthlySalesRange: formData.monthlySalesRange,
         reasonForSale: formData.reasonForSale,
-        whatsIncluded: whatsIncluded,
-        contactMethod: formData.contactMethod,
-        contactDetail: formData.contactDetail.trim(),
-        contactName: formData.contactName.trim() || 'Seller',
-        photoUrls: photos,
+        whatsIncluded,
+        photoUrls: formData.isConfidential ? [] : photoUrls,
         status: 'active',
-        createdAt: Timestamp.now(),
-        expiresAt: Timestamp.fromDate(new Date(Date.now() + 60 * 24 * 60 * 60 * 1000)), // 60 days
+        createdAt: now,
+        expiresAt: Timestamp.fromMillis(now.toMillis() + 90 * 24 * 60 * 60 * 1000),
         viewCount: 0
       };
 
-      const docRef = await addDoc(collection(db, 'businessListings'), listingData);
+      const privateListing = {
+        sellerUserId: user.uid,
+        locationDescription: formData.locationDescription.trim(),
+        ndaLicenceStatus: formData.ndaLicenceStatus,
+        contactMethod: formData.contactMethod,
+        contactDetail: formData.contactDetail.trim(),
+        contactName: formData.contactName.trim() || 'Seller',
+        photoUrls,
+        updatedAt: now
+      };
+
+      const privateRef = doc(db, 'businessListingPrivate', listingRef.id);
+      await createPostingWithQuota({
+        quotaType: 'business',
+        ownerUid: user.uid,
+        postingRef: listingRef,
+        postingData: publicListing,
+        companionWrite: transaction => {
+          transaction.set(privateRef, privateListing);
+        }
+      });
 
       setToast({ isVisible: true, message: 'Business listed successfully!', type: 'success' });
-      setTimeout(() => {
-        navigate(`/marketplace/businesses/${docRef.id}`);
-      }, 1500);
-
+      setTimeout(() => navigate(`/marketplace/businesses/${listingRef.id}`), 1200);
     } catch (err) {
-      handleFirestoreError(err, OperationType.WRITE, 'businessListings');
-      setToast({ isVisible: true, message: 'Failed to post business listing.', type: 'error' });
+      await Promise.allSettled(uploadedPhotoRefs.map(photoRef => deleteObject(photoRef)));
+      if (err instanceof PostingQuotaExceededError) {
+        setActiveListingCount(3);
+        setToast({
+          isVisible: true,
+          message: 'You already have 3 active business listings. Close, sell, or withdraw one before creating another.',
+          type: 'error'
+        });
+      } else {
+        handleFirestoreError(err, OperationType.WRITE, 'businessListings');
+        setToast({ isVisible: true, message: 'Failed to post business listing.', type: 'error' });
+      }
+    } finally {
       setIsSubmitting(false);
     }
   };
@@ -150,11 +243,17 @@ export const CreateBusinessListing: React.FC = () => {
         <div className="w-16 h-16 bg-amber-50 rounded-2xl flex items-center justify-center text-amber-500 mx-auto mb-4 border border-amber-200">
           <Store size={32} />
         </div>
-        <h1 className="text-3xl font-black text-zinc-900 tracking-tight">Sell Your Pharmacy Business</h1>
+        <h1 className="text-3xl font-black text-zinc-900 tracking-tight">List a Healthcare or Pharmaceutical Business</h1>
         <p className="text-zinc-500 mt-2 max-w-lg mx-auto text-sm">
-          Connect with qualified, licensed pharmacists and corporate networks in Uganda. List confidentially or publicly.
+          Connect with active PharmaNetwork members while choosing whether sensitive seller details remain confidential.
         </p>
       </div>
+
+      {activeListingCount >= 3 && (
+        <div className="mb-6 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm font-semibold text-amber-800">
+          You have reached the current limit of 3 active business listings.
+        </div>
+      )}
 
       <form onSubmit={handleSubmit} className="bg-white rounded-3xl border border-zinc-100 shadow-xl overflow-hidden p-8 space-y-12 md:p-12">
         {/* SECTION 1: Core Identity */}
@@ -190,10 +289,10 @@ export const CreateBusinessListing: React.FC = () => {
               <div>
                 <label htmlFor="isConfidential" className="font-bold text-sm text-zinc-900 flex items-center gap-1 cursor-pointer">
                   <EyeOff size={16} className="text-amber-500" />
-                  CONFIDENTIAL LISTING (Highly Recommended)
+                  CONFIDENTIAL LISTING
                 </label>
                 <p className="text-xs text-zinc-500 mt-1 leading-relaxed">
-                  Protect patients, suppliers and staff. If checked, the public can only view general details, sales bands and district name. Photo gallery, exact block locations, licenses, and specific brand names remain entirely hidden until a confidentiality request or secure platform chat is initiated.
+                  If checked, other members can view only the general listing details. Seller contact details, exact location, licence details and private photos remain protected; interested members can contact you through platform messaging.
                 </p>
               </div>
             </div>
@@ -280,16 +379,16 @@ export const CreateBusinessListing: React.FC = () => {
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-zinc-400 uppercase tracking-widest mb-1">NDA Licencing Status</label>
+              <label className="block text-xs font-bold text-zinc-400 uppercase tracking-widest mb-1">Licence / Approval Status</label>
               <select
                 name="ndaLicenceStatus"
                 value={formData.ndaLicenceStatus}
                 onChange={handleInputChange}
                 className="w-full bg-zinc-50 border-none rounded-xl px-4 py-3.5 text-sm font-bold text-zinc-750 outline-none focus:ring-2 focus:ring-amber-500/20"
               >
-                <option value="licensed_current">Current NDA Licensed</option>
-                <option value="licence_expired">License Needs Renewal</option>
-                <option value="no_licence_equipment_only">No Active License (Selling assets only)</option>
+                <option value="licensed_current">Current / Valid</option>
+                <option value="licence_expired">Renewal Required</option>
+                <option value="no_licence_equipment_only">No Current Licence / Assets Only</option>
               </select>
             </div>
           </div>
@@ -399,21 +498,43 @@ export const CreateBusinessListing: React.FC = () => {
           </div>
 
           <div>
-            <label className="block text-xs font-bold text-zinc-400 uppercase tracking-widest mb-1 flex items-center gap-1">
+            <label className="block text-xs font-bold text-zinc-400 uppercase tracking-widest mb-2 flex items-center gap-1">
               <ImageIcon size={14} />
-              Photo URLs (Commas separated, optional)
+              Premises Photos
             </label>
-            <input
-              type="text"
-              name="photoUrlInput"
-              placeholder="e.g. https://domain.com/pharma1.jpg, https://domain.com/pharma2.jpg"
-              value={formData.photoUrlInput}
-              onChange={handleInputChange}
-              className="w-full bg-zinc-50 border-none rounded-xl px-4 py-3.5 text-xs font-semibold text-zinc-600 outline-none focus:ring-2 focus:ring-amber-500/20"
-            />
-            <p className="text-[10px] text-zinc-400 font-bold mt-1">
-              Leave blank to have a high-contrast pharmaceutical stock photo auto-assigned. Visible to all users if non-confidential.
+            <label className="flex items-center justify-center gap-2 w-full min-h-28 border-2 border-dashed border-zinc-200 rounded-2xl bg-zinc-50 cursor-pointer hover:border-amber-400 transition-colors">
+              <UploadCloud size={20} className="text-amber-600" />
+              <span className="text-sm font-bold text-zinc-600">Select up to 3 photos</span>
+              <input
+                type="file"
+                accept="image/jpeg,image/png"
+                multiple
+                hidden
+                onChange={e => handlePhotoFiles(e.target.files)}
+              />
+            </label>
+            <p className="text-[10px] text-zinc-400 font-bold mt-2">
+              JPG or PNG only, maximum 5MB per photo. Photos are stored in PharmaNetwork Storage.
             </p>
+            {photoFiles.length > 0 && (
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-4">
+                {photoFiles.map((file, index) => (
+                  <div key={`${file.name}-${index}`} className="p-3 rounded-xl border border-zinc-200 bg-white">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-xs font-semibold truncate">{file.name}</span>
+                      <button
+                        type="button"
+                        onClick={() => setPhotoFiles(files => files.filter((_, fileIndex) => fileIndex !== index))}
+                        className="text-rose-600"
+                        aria-label="Remove photo"
+                      >
+                        <X size={14} />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
 
@@ -465,7 +586,7 @@ export const CreateBusinessListing: React.FC = () => {
             </div>
           </div>
           <p className="text-[10px] text-zinc-400 font-bold bg-zinc-50 p-4 rounded-xl border border-dashed border-zinc-100">
-            For Confidential listings: Guest users can NOT view these details. Logged-in verified pharmacists can reach out directly via our real-time messenger in complete privacy.
+            For confidential listings, these contact details are protected from other members. Interested members can reach out through platform messaging directly via our real-time messenger in complete privacy.
           </p>
         </div>
 

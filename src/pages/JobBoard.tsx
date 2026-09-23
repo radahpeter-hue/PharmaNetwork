@@ -5,7 +5,7 @@ import { db, handleFirestoreError, OperationType } from '../lib/firebase';
 import { collection, query, where, getDocs, Timestamp } from 'firebase/firestore';
 import { Button } from '../components/Button';
 import { JobPosting, AvailabilityPost } from '../types';
-import { PHARMA_CADRES, UGANDA_DISTRICTS, EMPLOYMENT_TYPES } from '../constants';
+import { PROFESSIONAL_CADRES, UGANDA_DISTRICTS, EMPLOYMENT_TYPES, normalizeProfessionalCadreId, professionalCadreLabel } from '../constants';
 import { 
   Search, 
   MapPin, 
@@ -55,7 +55,8 @@ const JobBoard: React.FC = () => {
       const now = Timestamp.now();
       const simplerQ = query(
         collection(db, 'jobPostings'),
-        where('status', '==', 'active')
+        where('status', '==', 'active'),
+        where('expiresAt', '>', now)
       );
       
       const snap = await getDocs(simplerQ);
@@ -77,7 +78,8 @@ const JobBoard: React.FC = () => {
       const now = Timestamp.now();
       const q = query(
         collection(db, 'availabilityPosts'),
-        where('status', '==', 'active')
+        where('status', '==', 'active'),
+        where('expiresAt', '>', now)
       );
       const snap = await getDocs(q);
       const data = snap.docs.map(doc => ({ ...doc.data(), id: doc.id } as AvailabilityPost))
@@ -97,7 +99,8 @@ const JobBoard: React.FC = () => {
       const now = Timestamp.now();
       const q = query(
         collection(db, 'businessListings'),
-        where('status', '==', 'active')
+        where('status', '==', 'active'),
+        where('expiresAt', '>', now)
       );
       const snap = await getDocs(q);
       const data = snap.docs.map(doc => ({ ...doc.data(), id: doc.id } as any))
@@ -118,7 +121,7 @@ const JobBoard: React.FC = () => {
   }, [activeTab]);
 
   const filteredJobs = jobs.filter(j => {
-    if (filters.cadre !== 'All' && j.cadreRequired !== filters.cadre) return false;
+    if (filters.cadre !== 'All' && normalizeProfessionalCadreId(j.cadreRequired) !== filters.cadre) return false;
     if (filters.district !== 'All' && j.district !== filters.district) return false;
     if (filters.employmentTypes.length > 0 && !filters.employmentTypes.includes(j.employmentType)) return false;
     return true;
@@ -300,7 +303,9 @@ const JobBoard: React.FC = () => {
                    className="w-full bg-zinc-50 border-none rounded-xl px-4 py-3 text-sm font-semibold text-zinc-700 outline-none focus:ring-2 focus:ring-primary/20 animate-fade-in"
                  >
                    <option value="All">All Cadres</option>
-                   {PHARMA_CADRES.map(c => <option key={c} value={c}>{c}</option>)}
+                   {PROFESSIONAL_CADRES.map(cadre => (
+                     <option key={cadre.id} value={cadre.id}>{cadre.label}</option>
+                   ))}
                  </select>
                </div>
              ) : (
@@ -497,7 +502,7 @@ const JobCard: React.FC<{ job: JobPosting; getRelativeTime: any }> = ({ job, get
 
       <div className="flex flex-wrap gap-2 mb-6">
          <span className="bg-green-50 text-primary-light text-[10px] font-bold px-2.5 py-1 rounded-lg uppercase border border-primary/10">
-           {job.cadreRequired.replace(/_/g, ' ')}
+           {professionalCadreLabel(job.cadreRequired)}
          </span>
          <span className="bg-amber-50 text-amber-700 text-[10px] font-bold px-2.5 py-1 rounded-lg uppercase border border-amber-200/50">
            {job.employmentType.replace(/_/g, ' ')}

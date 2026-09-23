@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate, Navigate, Link } from 'react-router-dom';
 import { db } from '../lib/firebase';
-import { collection, addDoc, query, where, getDocs, Timestamp, doc, getDoc } from 'firebase/firestore';
+import { collection, query, where, getDocs, Timestamp, doc } from 'firebase/firestore';
 import { Button } from '../components/Button';
 import { Toast, ToastType } from '../components/Toast';
 import { PHARMA_CADRES, UGANDA_DISTRICTS, EMPLOYMENT_TYPES, CONTACT_METHODS } from '../constants';
@@ -10,6 +10,7 @@ import { User, MapPin, Phone, Mail, Award, AlertCircle, Eye, CheckCircle2, Messa
 import { motion } from 'motion/react';
 import { IndividualProfile } from '../types';
 import { cn } from '../lib/utils';
+import { createPostingWithQuota, PostingQuotaExceededError } from '../lib/postingQuota';
 
 const CreateAvailabilityPost: React.FC = () => {
   const { user, userAccount, profile, loading } = useAuth();
@@ -27,12 +28,6 @@ const CreateAvailabilityPost: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [toast, setToast] = useState({ isVisible: false, message: '', type: 'success' as ToastType });
 
-  // Access check
-  if (loading) return null;
-  if (!user || userAccount?.accountType !== 'individual') {
-    return <Navigate to="/dashboard" replace />;
-  }
-
   const indProfile = profile as IndividualProfile;
 
   useEffect(() => {
@@ -44,12 +39,24 @@ const CreateAvailabilityPost: React.FC = () => {
         where('status', '==', 'active')
       );
       const snap = await getDocs(q);
-      if (!snap.empty) {
-        setExistingPostId(snap.docs[0].id);
-      }
+      const now = Date.now();
+      const existingActive = snap.docs.find(postDoc => {
+        const expiresAt = postDoc.data().expiresAt;
+        if (!expiresAt) return false;
+        const expiresMillis = expiresAt.toMillis ? expiresAt.toMillis() : new Date(expiresAt).getTime();
+        return expiresMillis > now;
+      });
+      setExistingPostId(existingActive?.id || null);
     };
     checkExisting();
   }, [user]);
+
+  // Access check
+  if (loading) return null;
+  if (!user || userAccount?.accountType !== 'individual') {
+    return <Navigate to="/dashboard" replace />;
+  }
+
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
@@ -104,13 +111,28 @@ const CreateAvailabilityPost: React.FC = () => {
         interestCount: 0
       };
 
-      await addDoc(collection(db, 'availabilityPosts'), postData);
+      const postingRef = doc(collection(db, 'availabilityPosts'));
+      await createPostingWithQuota({
+        quotaType: 'availability',
+        ownerUid: user.uid,
+        postingRef,
+        postingData: postData
+      });
       
       setToast({ isVisible: true, message: 'Your availability post is live.', type: 'success' });
       setTimeout(() => navigate('/jobs'), 2000); // Redirect to board, naturally user will see available tab
     } catch (err) {
       console.error('Error creating post:', err);
-      setToast({ isVisible: true, message: 'Something went wrong.', type: 'error' });
+      if (err instanceof PostingQuotaExceededError) {
+        setExistingPostId('quota-occupied');
+        setToast({
+          isVisible: true,
+          message: 'You already have an active availability post. Update or close it before creating a new one.',
+          type: 'error'
+        });
+      } else {
+        setToast({ isVisible: true, message: 'Something went wrong.', type: 'error' });
+      }
     } finally {
       setIsSubmitting(false);
     }
