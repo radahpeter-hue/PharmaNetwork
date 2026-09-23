@@ -26,6 +26,10 @@ const YEARS_OPTIONS = [
 const AREAS_OF_PRACTICE = [
   'Retail / Community',
   'Hospital / Clinical',
+  'Nursing / Midwifery',
+  'Allied Health',
+  'Medical / Dental Practice',
+  'Laboratory Services',
   'Industrial / Manufacturing',
   'Wholesale / Distribution',
   'Regulatory Affairs',
