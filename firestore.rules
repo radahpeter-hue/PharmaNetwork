@@ -102,9 +102,18 @@ service cloud.firestore {
       allow create: if isSignedIn()
         && request.resource.data.organisationUserId == request.auth.uid
         && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.accountType == 'organisation';
-      allow update, delete: if isSignedIn()
-        && (resource.data.organisationUserId == request.auth.uid || isAdmin())
-        && request.resource.data.organisationUserId == resource.data.organisationUserId;
+      allow update: if isSignedIn() && (
+        (
+          (resource.data.organisationUserId == request.auth.uid || isAdmin())
+          && request.resource.data.organisationUserId == resource.data.organisationUserId
+        )
+        || (
+          request.resource.data.organisationUserId == resource.data.organisationUserId
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['interestCount'])
+          && request.resource.data.interestCount == resource.data.interestCount + 1
+        )
+      );
+      allow delete: if isSignedIn() && (resource.data.organisationUserId == request.auth.uid || isAdmin());
     }
 
     match /availabilityPosts/{postId} {
@@ -112,14 +121,23 @@ service cloud.firestore {
       allow create: if isSignedIn()
         && request.resource.data.individualUserId == request.auth.uid
         && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.accountType == 'individual';
-      allow update, delete: if isSignedIn()
-        && (resource.data.individualUserId == request.auth.uid || isAdmin())
-        && request.resource.data.individualUserId == resource.data.individualUserId;
+      allow update: if isSignedIn() && (
+        (
+          (resource.data.individualUserId == request.auth.uid || isAdmin())
+          && request.resource.data.individualUserId == resource.data.individualUserId
+        )
+        || (
+          request.resource.data.individualUserId == resource.data.individualUserId
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['interestCount'])
+          && request.resource.data.interestCount == resource.data.interestCount + 1
+        )
+      );
+      allow delete: if isSignedIn() && (resource.data.individualUserId == request.auth.uid || isAdmin());
     }
 
     match /interestEvents/{eventId} {
-      allow create: if isSignedIn() && request.resource.data.actorUserId == request.auth.uid;
-      allow read: if isSignedIn() && resource.data.actorUserId == request.auth.uid;
+      allow create: if isSignedIn() && request.resource.data.actorId == request.auth.uid;
+      allow read: if isSignedIn() && resource.data.actorId == request.auth.uid;
       allow update, delete: if isAdmin();
     }
 
