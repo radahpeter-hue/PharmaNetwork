@@ -104,6 +104,7 @@ export interface IndividualProfile {
   profilePhotoUrl?: string;
   cvUrl?: string;
   profileCompleteness: number;
+  isDirectoryVisible?: boolean;
   createdAt: any;
   updatedAt: any;
   // Verification updates (Part 10 & 11)
