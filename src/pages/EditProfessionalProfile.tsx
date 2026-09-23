@@ -91,6 +91,7 @@ const EditProfessionalProfile: React.FC = () => {
   }
 
   const current = profile as IndividualProfile;
+  const verifiedIdentityLocked = current.credentialVerificationStatus === 'verified';
 
   const [form, setForm] = useState<EditableForm>({
     fullName: current.fullName || '',
@@ -271,7 +272,15 @@ const EditProfessionalProfile: React.FC = () => {
           <h2 className="font-bold text-lg mb-6">Basic Information</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             <Field label="Full name">
-              <input className="form-input" value={form.fullName} onChange={e => setForm({ ...form, fullName: e.target.value })} />
+              <input
+                className="form-input disabled:opacity-60 disabled:cursor-not-allowed"
+                value={form.fullName}
+                disabled={verifiedIdentityLocked}
+                onChange={e => setForm({ ...form, fullName: e.target.value })}
+              />
+              {verifiedIdentityLocked && (
+                <p className="text-[11px] text-zinc-400 mt-1">Verified identity fields are locked. Contact the responsible professional authority if a correction is required.</p>
+              )}
             </Field>
             <Field label="Phone / WhatsApp">
               <input className="form-input" value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} />
@@ -297,12 +306,22 @@ const EditProfessionalProfile: React.FC = () => {
           <h2 className="font-bold text-lg mb-6">Professional Details</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             <Field label="Primary cadre">
-              <select className="form-input" value={form.primaryCadre} onChange={e => setForm({ ...form, primaryCadre: e.target.value as PrimaryCadre })}>
+              <select
+                className="form-input disabled:opacity-60 disabled:cursor-not-allowed"
+                value={form.primaryCadre}
+                disabled={verifiedIdentityLocked}
+                onChange={e => setForm({ ...form, primaryCadre: e.target.value as PrimaryCadre })}
+              >
                 {CADRE_OPTIONS.map(option => <option key={option.id} value={option.id}>{option.label}</option>)}
               </select>
             </Field>
             <Field label="Professional registration number">
-              <input className="form-input" value={form.registrationNumber} onChange={e => setForm({ ...form, registrationNumber: e.target.value })} />
+              <input
+                className="form-input disabled:opacity-60 disabled:cursor-not-allowed"
+                value={form.registrationNumber}
+                disabled={verifiedIdentityLocked}
+                onChange={e => setForm({ ...form, registrationNumber: e.target.value })}
+              />
               <p className="text-[11px] text-zinc-400 mt-1">Submitted registration details remain subject to professional-authority verification.</p>
             </Field>
             <Field label="Highest qualification">
