@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Button } from '../components/Button';
 import { IndividualProfile, OrganisationProfile } from '../types';
@@ -29,10 +29,12 @@ import { doc, setDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { getStorage, ref, uploadBytes } from 'firebase/storage';
 import { getProfessionalProfileMissingItems } from '../lib/profileCompleteness';
+import { Toast } from '../components/Toast';
 
 const Profile: React.FC = () => {
   const { user, userAccount, profile, refreshUserData } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
 
   // Verification request workflow states
   const [uploading, setUploading] = useState(false);
@@ -54,8 +56,17 @@ const Profile: React.FC = () => {
     ? getProfessionalProfileMissingItems(profile as IndividualProfile)
     : [];
 
+  const profileUpdated = Boolean((location.state as { profileUpdated?: boolean; organisationUpdated?: boolean } | null)?.profileUpdated);
+  const organisationUpdated = Boolean((location.state as { profileUpdated?: boolean; organisationUpdated?: boolean } | null)?.organisationUpdated);
+
   return (
     <div className="max-w-4xl mx-auto px-4 py-12">
+      <Toast
+        isVisible={profileUpdated || organisationUpdated}
+        type="success"
+        message={organisationUpdated ? 'Organisation profile updated successfully.' : 'Profile updated successfully.'}
+        onClose={() => navigate(location.pathname, { replace: true, state: {} })}
+      />
       {/* Completeness Bar */}
       <div className="bg-zinc-900 text-white p-6 rounded-2xl mb-12 flex flex-col md:flex-row md:items-center justify-between gap-6 overflow-hidden relative">
          <div className="relative z-10">
