@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
-import { collection, addDoc, doc, updateDoc, increment, Timestamp } from 'firebase/firestore';
+import { collection, addDoc, Timestamp } from 'firebase/firestore';
 import { Button } from '../components/Button';
 import { UGANDA_DISTRICTS, CONTACT_METHODS } from '../constants';
 import { Toast, ToastType } from '../components/Toast';
@@ -124,15 +124,6 @@ export const CreateBusinessListing: React.FC = () => {
       };
 
       const docRef = await addDoc(collection(db, 'businessListings'), listingData);
-
-      // Increment active opportunities count in stats
-      try {
-        await updateDoc(doc(db, 'platformStats', 'counts'), {
-          activeOpportunities: increment(1)
-        });
-      } catch (err) {
-        console.warn('Could not update aggregated counts: ', err);
-      }
 
       setToast({ isVisible: true, message: 'Business listed successfully!', type: 'success' });
       setTimeout(() => {
