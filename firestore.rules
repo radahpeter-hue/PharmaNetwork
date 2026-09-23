@@ -168,7 +168,17 @@ service cloud.firestore {
         && request.resource.data.participants[0] != request.resource.data.participants[1];
       allow update: if isSignedIn()
         && request.auth.uid in resource.data.participants
-        && request.resource.data.participants == resource.data.participants;
+        && request.resource.data.participants == resource.data.participants
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'lastMessage',
+          'lastMessageAt',
+          'lastMessageSenderId',
+          'unreadCount'
+        ])
+        && (
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['unreadCount'])
+          || request.resource.data.lastMessageSenderId == request.auth.uid
+        );
       allow delete: if isAdmin();
 
       match /messageThread/{messageId} {
@@ -177,8 +187,9 @@ service cloud.firestore {
         allow create: if isSignedIn()
           && request.auth.uid in get(/databases/$(database)/documents/messages/$(conversationId)).data.participants
           && request.resource.data.senderId == request.auth.uid
-          && request.resource.data.text is string
-          && request.resource.data.text.size() <= 1000;
+          && request.resource.data.body is string
+          && request.resource.data.body.size() > 0
+          && request.resource.data.body.size() <= 1000;
         allow update, delete: if false;
       }
     }
