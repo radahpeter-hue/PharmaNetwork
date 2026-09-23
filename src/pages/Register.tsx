@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { auth, db, handleFirestoreError, OperationType } from '../lib/firebase';
 import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
-import { doc, setDoc, addDoc, collection, serverTimestamp, increment } from 'firebase/firestore';
+import { doc, setDoc, addDoc, collection, serverTimestamp } from 'firebase/firestore';
 import { Button } from '../components/Button';
 import { 
   User, 
@@ -141,23 +141,6 @@ const Register: React.FC = () => {
           createdAt: serverTimestamp(),
           updatedAt: serverTimestamp()
         });
-      }
-
-      // 4. Update platform stats counts
-      const statsRef = doc(db, 'platformStats', 'counts');
-      let statsUpdates: Record<string, any> = {};
-      if (accountType === 'individual') {
-        if (individualDetails.primaryCadre === 'pharmacist') {
-          statsUpdates.registeredPharmacists = increment(1);
-        } else {
-          statsUpdates.auxiliaryProfessionals = increment(1);
-        }
-      } else if (accountType === 'organisation') {
-        statsUpdates.pharmacyOwners = increment(1);
-      }
-
-      if (Object.keys(statsUpdates).length > 0) {
-        await setDoc(statsRef, statsUpdates, { merge: true });
       }
 
       setStep(4);
