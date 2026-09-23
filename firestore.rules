@@ -236,6 +236,8 @@ service cloud.firestore {
         ])
         && request.resource.data.keys().hasOnly([
           'userId',
+          'registrationCertificatePath',
+          'practisingCertificatePath',
           'registrationCertificateUrl',
           'practisingCertificateUrl',
           'additionalDocumentUrls',
@@ -252,6 +254,8 @@ service cloud.firestore {
           && request.resource.data.userId == resource.data.userId
           && request.resource.data.submissionStatus == 'pending_review'
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'registrationCertificatePath',
+            'practisingCertificatePath',
             'registrationCertificateUrl',
             'practisingCertificateUrl',
             'additionalDocumentUrls',
