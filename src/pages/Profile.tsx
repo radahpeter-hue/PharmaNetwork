@@ -28,6 +28,7 @@ import { cn } from '../lib/utils';
 import { doc, setDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { getStorage, ref, uploadBytes } from 'firebase/storage';
+import { getProfessionalProfileMissingItems } from '../lib/profileCompleteness';
 
 const Profile: React.FC = () => {
   const { user, userAccount, profile, refreshUserData } = useAuth();
@@ -49,6 +50,9 @@ const Profile: React.FC = () => {
 
   const isIndividual = 'fullName' in profile;
   const completeness = profile.profileCompleteness || 0;
+  const missingProfileItems = isIndividual
+    ? getProfessionalProfileMissingItems(profile as IndividualProfile)
+    : [];
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-12">
@@ -76,9 +80,29 @@ const Profile: React.FC = () => {
       </div>
 
       {isIndividual && completeness < 60 && (
-        <div className="mb-8 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <span>Your profile is not yet eligible for directory visibility. Complete it to at least 60% and maintain ACTIVE professional status.</span>
-          <button onClick={() => navigate('/profile/edit')} className="font-bold underline underline-offset-2">Complete profile</button>
+        <div className="mb-8 rounded-2xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-900">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <span className="font-semibold">Your profile is not yet eligible for directory visibility. Complete it to at least 60% and maintain ACTIVE professional status.</span>
+            <button onClick={() => navigate('/profile/edit')} className="font-bold underline underline-offset-2 shrink-0">Complete profile</button>
+          </div>
+          {missingProfileItems.length > 0 && (
+            <div className="mt-4 pt-4 border-t border-amber-200">
+              <p className="text-xs font-black uppercase tracking-widest text-amber-700 mb-2">Missing or incomplete items</p>
+              <ul className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                {missingProfileItems.map(item => (
+                  <li key={item.key}>
+                    <button
+                      type="button"
+                      onClick={() => navigate('/profile/edit')}
+                      className="text-left underline underline-offset-2 hover:text-amber-950"
+                    >
+                      {item.label}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
       )}
 
