@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { db, auth } from '../lib/firebase';
+import { db } from '../lib/firebase';
 import { 
   collection, 
   query, 
@@ -446,10 +446,11 @@ export const BodyAdminConsole: React.FC = () => {
     }
   };
 
-  // Verify and fetch administrative data
+  // Verify and fetch professional-authority administrative data.
+  // Authority accounts must be provisioned through trusted backend processes.
   useEffect(() => {
     let isMounted = true;
-    
+
     if (!user) {
       setLoadingAdmin(false);
       return;
@@ -457,113 +458,36 @@ export const BodyAdminConsole: React.FC = () => {
 
     const checkAdminAffiliation = async () => {
       try {
-        // Evaluate by direct search or claim fallback for secure local dev
         const adminDocRef = doc(db, 'regulatoryBodyAdmins', user.uid);
         const adminDocSnap = await getDoc(adminDocRef);
 
-        if (adminDocSnap.exists()) {
-          const data = adminDocSnap.data() as RegulatoryAdmin;
-          if (data.isActive === false) {
-            signOut();
-            alert("Your regulatory admin account has been deactivated. Contact the platform administrator.");
-            navigate('/login');
-            return;
-          }
-          if (isMounted) {
-            setAdminProfile(data);
-          }
-        } else {
-          // If the spec account exists as PSU admin or AHPC admin by email, let's auto-provision or match them client side!
-          letMatchedStaffCollection(isMounted);
-        }
-      } catch (err) {
-        console.error("Checking admin doc affiliation has failed:", err);
-        if (isMounted) {
-          setLoadingAdmin(false);
-        }
-      }
-    };
-
-    const letMatchedStaffCollection = async (isMounted: boolean) => {
-      const email = user.email || '';
-      let mockAdmin: RegulatoryAdmin | null = null;
-
-      if (email === 'psu.admin@demo.pnu.ug') {
-        mockAdmin = {
-          uid: user.uid,
-          fullName: "Dr. Amina Ssekandi",
-          email: "psu.admin@demo.pnu.ug",
-          body: "PSU",
-          bodyFullName: "Pharmaceutical Society of Uganda",
-          scopedCadres: ["pharmacist"],
-          role: "body_admin",
-          isActive: true,
-          notes: "Demo PSU Admin staff account."
-        };
-      } else if (email === 'ahpc.admin@demo.pnu.ug') {
-        mockAdmin = {
-          uid: user.uid,
-          fullName: "Mr. Robert Opio",
-          email: "ahpc.admin@demo.pnu.ug",
-          body: "AHPC",
-          bodyFullName: "Allied Health Professionals Council",
-          scopedCadres: [
-            "pharmacy_technician", 
-            "pharmacy_assistant", 
-            "dispenser", 
-            "drug_shop_auxiliary", 
-            "qa_qc_officer", 
-            "procurement_officer", 
-            "stores_officer", 
-            "stores_manager"
-          ],
-          role: "body_admin",
-          isActive: true,
-          notes: "Demo AHPC Admin staff account."
-        };
-      }
-
-      if (mockAdmin) {
-        try {
-          // Write to Firestore to persist it
-          await updateDoc(doc(db, 'regulatoryBodyAdmins', user.uid), mockAdmin as any).catch(async () => {
-            // If document does not exist, use setDoc/create write
-            const { setDoc } = await import('firebase/firestore');
-            await setDoc(doc(db, 'regulatoryBodyAdmins', user.uid), mockAdmin);
-          });
-          if (isMounted) {
-            setAdminProfile(mockAdmin);
-          }
-        } catch (writeErr) {
-          console.warn("Could not write regulatory admin doc automatically, using client state.", writeErr);
-          if (isMounted) {
-            setAdminProfile(mockAdmin);
-          }
-        }
-      } else {
-        // Redirection route guard if the user lacks regulatory privileges
-        // Double check if standard platform admin
-        const idToken = await auth.currentUser?.getIdTokenResult();
-        if (idToken?.claims.admin || user.email === 'admin.peter@pharmagh.com') {
-          navigate('/admin');
+        if (!adminDocSnap.exists()) {
+          navigate('/dashboard');
           return;
         }
-        
-        navigate('/dashboard');
-      }
-      if (isMounted) {
-        setLoadingAdmin(false);
+
+        const data = adminDocSnap.data() as RegulatoryAdmin;
+        if (data.isActive === false) {
+          await signOut();
+          navigate('/login');
+          return;
+        }
+
+        if (isMounted) setAdminProfile(data);
+      } catch (err) {
+        console.error('Checking professional authority affiliation failed:', err);
+        if (isMounted) setAdminProfile(null);
+      } finally {
+        if (isMounted) setLoadingAdmin(false);
       }
     };
 
-    checkAdminAffiliation().then(() => {
-      if (isMounted) setLoadingAdmin(false);
-    });
+    checkAdminAffiliation();
 
     return () => {
       isMounted = false;
     };
-  }, [user, navigate]);
+  }, [user, navigate, signOut]);
 
   // Load appropriate data whenever active tab or admin profile changes
   useEffect(() => {
