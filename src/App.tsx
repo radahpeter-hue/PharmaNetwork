@@ -16,6 +16,7 @@ import JobPostingDetail from './pages/JobPostingDetail';
 import EditJobPosting from './pages/EditJobPosting';
 import CreateAvailabilityPost from './pages/CreateAvailabilityPost';
 import AvailabilityPostDetail from './pages/AvailabilityPostDetail';
+import EditAvailabilityPost from './pages/EditAvailabilityPost';
 import MyPostings from './pages/MyPostings';
 import CreateBusinessListing from './pages/CreateBusinessListing';
 import BusinessListingDetail from './pages/BusinessListingDetail';
@@ -197,6 +198,14 @@ function App() {
                     <AvailabilityPostDetail />
                   </ProtectedRoute>
                 } 
+              />
+              <Route
+                path="/availability/:postId/edit"
+                element={
+                  <ProtectedRoute>
+                    <EditAvailabilityPost />
+                  </ProtectedRoute>
+                }
               />
               <Route 
                 path="/my-postings" 
