@@ -10,6 +10,7 @@ interface AuthContextType {
   profile: IndividualProfile | OrganisationProfile | null;
   loading: boolean;
   signOut: () => Promise<void>;
+  refreshUserData: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -41,25 +42,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const accountDoc = await getDoc(doc(db, 'users', userId));
       
       if (!accountDoc.exists()) {
-        console.warn('Authenticated user has no PharmaNetwork account record. Terminating session.');
-        await firebaseSignOut(auth);
+        // A newly created Firebase Auth user may briefly exist before the
+        // registration flow writes its PharmaNetwork account document.
         setUserAccount(null);
         setProfile(null);
-        setUser(null);
         return;
       }
 
       const accountData = accountDoc.data() as UserAccount;
-
-      if (accountData.isActive === false) {
-        console.warn('User account is deactivated. Terminating session.');
-        await firebaseSignOut(auth);
-        setUserAccount(null);
-        setProfile(null);
-        setUser(null);
-        return;
-      }
-
       setUserAccount(accountData);
 
       // 2. Fetch profile - doc ID == userId
@@ -85,8 +75,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     await firebaseSignOut(auth);
   };
 
+  const refreshUserData = async () => {
+    if (!auth.currentUser) {
+      setUserAccount(null);
+      setProfile(null);
+      return;
+    }
+    setLoading(true);
+    await fetchUserData(auth.currentUser.uid);
+  };
+
   return (
-    <AuthContext.Provider value={{ user, userAccount, profile, loading, signOut }}>
+    <AuthContext.Provider value={{ user, userAccount, profile, loading, signOut, refreshUserData }}>
       {children}
     </AuthContext.Provider>
   );
