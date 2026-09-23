@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate, Navigate } from 'react-router-dom';
 import { db } from '../lib/firebase';
-import { collection, addDoc, query, where, getDocs, Timestamp, increment, doc, updateDoc } from 'firebase/firestore';
+import { collection, addDoc, query, where, getDocs, Timestamp } from 'firebase/firestore';
 import { Button } from '../components/Button';
 import { Toast, ToastType } from '../components/Toast';
 import { PHARMA_CADRES, UGANDA_DISTRICTS, EMPLOYMENT_TYPES, CONTACT_METHODS } from '../constants';
@@ -114,11 +114,6 @@ const CreateJobPosting: React.FC = () => {
       };
 
       await addDoc(collection(db, 'jobPostings'), jobData);
-      
-      // Increment platform opportunities count
-      await updateDoc(doc(db, 'platformStats', 'counts'), {
-        activeOpportunities: increment(1)
-      });
 
       setToast({ isVisible: true, message: 'Your job posting is live.', type: 'success' });
       setTimeout(() => navigate('/jobs'), 2000);
