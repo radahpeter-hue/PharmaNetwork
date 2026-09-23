@@ -7,7 +7,9 @@ service firebase.storage {
     }
 
     function isPlatformAdmin() {
-      return isSignedIn() && request.auth.token.admin == true;
+      return isSignedIn()
+        && ('admin' in request.auth.token)
+        && request.auth.token.admin == true;
     }
 
     function isActiveMember() {
@@ -24,6 +26,7 @@ service firebase.storage {
 
     function isAuthorityAdmin() {
       return isSignedIn()
+        && ('authority_admin' in request.auth.token)
         && request.auth.token.authority_admin == true
         && firestore.exists(/databases/(default)/documents/professionalAuthorityAdmins/$(request.auth.uid))
         && firestore.get(/databases/(default)/documents/professionalAuthorityAdmins/$(request.auth.uid)).data.isActive == true;
