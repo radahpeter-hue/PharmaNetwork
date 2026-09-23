@@ -273,7 +273,8 @@ const Profile: React.FC = () => {
                            submissionStatus: 'pending_review'
                          }, { merge: true });
 
-                         if (userAccount?.accountStatus === 'PENDING_PROFILE') {
+                         if (userAccount?.accountStatus === 'PENDING_PROFILE'
+                           || userAccount?.accountStatus === 'MORE_INFORMATION_REQUIRED') {
                            await updateDoc(doc(db, 'users', user!.uid), {
                              accountStatus: 'PENDING_AUTHORITY_VERIFICATION',
                              updatedAt: serverTimestamp()
