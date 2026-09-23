@@ -323,43 +323,68 @@ async function planBusinessPrivacyMigration() {
   const snapshot = await db.collection('businessListings').get();
   report.businessPrivacy.scanned = snapshot.size;
 
+  const valuesEqual = (left, right) => {
+    if (Array.isArray(left) || Array.isArray(right)) {
+      return JSON.stringify(left ?? null) === JSON.stringify(right ?? null);
+    }
+    return left === right;
+  };
+
   for (const docSnap of snapshot.docs) {
     const data = docSnap.data();
+    const privateRef = db.collection('businessListingPrivate').doc(docSnap.id);
+    const privateSnap = await privateRef.get();
+    const existingPrivate = privateSnap.exists ? privateSnap.data() : {};
+
     const publicPatch = {};
     const privatePatch = {};
     let sanitizePublic = false;
-    let upsertPrivate = false;
 
-    if (data.sellerUserId) {
-      privatePatch.sellerUserId = data.sellerUserId;
+    const setPrivateIfChanged = (field, value) => {
+      if (!valuesEqual(existingPrivate[field], value)) {
+        privatePatch[field] = value;
+      }
+    };
+
+    if (privateSnap.exists && data.sellerUserId) {
+      setPrivateIfChanged('sellerUserId', data.sellerUserId);
     }
 
     for (const field of BUSINESS_PRIVATE_FIELDS) {
       if (Object.prototype.hasOwnProperty.call(data, field)) {
-        privatePatch[field] = data[field];
+        if (data.sellerUserId) {
+          setPrivateIfChanged('sellerUserId', data.sellerUserId);
+        }
+        setPrivateIfChanged(field, data[field]);
         publicPatch[field] = FieldValue.delete();
         sanitizePublic = true;
-        upsertPrivate = true;
       }
     }
 
     if (Array.isArray(data.photoUrls)) {
-      privatePatch.photoUrls = data.photoUrls;
-      upsertPrivate = true;
-
-      if (data.isConfidential === true && data.photoUrls.length > 0) {
-        publicPatch.photoUrls = [];
-        sanitizePublic = true;
+      if (data.isConfidential === true) {
+        if (data.photoUrls.length > 0) {
+          if (data.sellerUserId) {
+            setPrivateIfChanged('sellerUserId', data.sellerUserId);
+          }
+          setPrivateIfChanged('photoUrls', data.photoUrls);
+          publicPatch.photoUrls = [];
+          sanitizePublic = true;
+        }
+      } else if (
+        data.photoUrls.length > 0 ||
+        (privateSnap.exists && Array.isArray(existingPrivate.photoUrls))
+      ) {
+        if (data.sellerUserId) {
+          setPrivateIfChanged('sellerUserId', data.sellerUserId);
+        }
+        setPrivateIfChanged('photoUrls', data.photoUrls);
       }
     }
 
-    if (upsertPrivate) {
+    if (Object.keys(privatePatch).length > 0) {
       privatePatch.updatedAt = Timestamp.now();
-      queueSet(
-        db.collection('businessListingPrivate').doc(docSnap.id),
-        privatePatch,
-        { merge: true }
-      );
+      queueSet(privateRef, privatePatch, { merge: true });
       report.businessPrivacy.privateDocumentsUpserted += 1;
     }
 
