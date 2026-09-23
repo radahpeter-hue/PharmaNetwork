@@ -27,6 +27,11 @@ service cloud.firestore {
         && (cadre in get(/databases/$(database)/documents/professionalAuthorityAdmins/$(request.auth.uid)).data.scopedCadres);
     }
 
+    function authorityRoleIsOneOf(roles) {
+      return isAuthorityAdmin()
+        && get(/databases/$(database)/documents/professionalAuthorityAdmins/$(request.auth.uid)).data.role in roles;
+    }
+
     function authorityCanAccessProfessional(userId) {
       return isAuthorityAdmin()
         && exists(/databases/$(database)/documents/individualProfiles/$(userId))
@@ -35,14 +40,33 @@ service cloud.firestore {
         );
     }
 
-    function isAdminScopedForProfile(cadre) {
+    function canVerifyProfessional(userId) {
+      return authorityCanAccessProfessional(userId)
+        && authorityRoleIsOneOf(['authority_super_admin', 'verification_officer']);
+    }
+
+    function canManageComplianceProfessional(userId) {
+      return authorityCanAccessProfessional(userId)
+        && authorityRoleIsOneOf(['authority_super_admin', 'compliance_officer']);
+    }
+
+    function isAuthorityVerificationProfileUpdate(cadre) {
       return authorityAdminHasCadre(cadre)
+        && authorityRoleIsOneOf(['authority_super_admin', 'verification_officer'])
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
           'credentialVerificationStatus',
           'credentialVerifiedAt',
           'credentialVerifiedByBody',
           'credentialVerifiedByUid',
           'credentialRejectionReason',
+          'updatedAt'
+        ]);
+    }
+
+    function isAuthorityComplianceProfileUpdate(cadre) {
+      return authorityAdminHasCadre(cadre)
+        && authorityRoleIsOneOf(['authority_super_admin', 'compliance_officer'])
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
           'practisingLicenceStatus',
           'practisingLicenceYear',
           'licenceRenewalDate',
@@ -50,6 +74,59 @@ service cloud.firestore {
           'licenceSuspensionReason',
           'updatedAt'
         ]);
+    }
+
+    function isAuthorityVerificationAccountUpdate(userId) {
+      return canVerifyProfessional(userId)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'accountStatus',
+          'isActive',
+          'isVerified',
+          'updatedAt'
+        ])
+        && (
+          (
+            request.resource.data.accountStatus == 'MORE_INFORMATION_REQUIRED'
+            && request.resource.data.isActive == false
+            && request.resource.data.isVerified == false
+          )
+          || (
+            request.resource.data.accountStatus == 'REJECTED'
+            && request.resource.data.isActive == false
+            && request.resource.data.isVerified == false
+          )
+          || (
+            request.resource.data.accountStatus == 'INACTIVE_ANNUAL_COMPLIANCE'
+            && request.resource.data.isActive == false
+            && request.resource.data.isVerified == true
+          )
+        );
+    }
+
+    function isAuthorityComplianceAccountUpdate(userId) {
+      return canManageComplianceProfessional(userId)
+        && resource.data.isVerified == true
+        && request.resource.data.isVerified == true
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'accountStatus',
+          'isActive',
+          'isVerified',
+          'updatedAt'
+        ])
+        && (
+          (
+            request.resource.data.accountStatus == 'ACTIVE'
+            && request.resource.data.isActive == true
+          )
+          || (
+            request.resource.data.accountStatus == 'INACTIVE_ANNUAL_COMPLIANCE'
+            && request.resource.data.isActive == false
+          )
+          || (
+            request.resource.data.accountStatus == 'SUSPENDED_BY_AUTHORITY'
+            && request.resource.data.isActive == false
+          )
+        );
     }
 
     function professionalVerificationFieldsUnchanged() {
@@ -99,11 +176,14 @@ service cloud.firestore {
         && (
           request.resource.data.accountStatus == resource.data.accountStatus
           || (
-            resource.data.accountStatus == 'PENDING_PROFILE'
+            resource.data.accountStatus in ['PENDING_PROFILE', 'MORE_INFORMATION_REQUIRED']
             && request.resource.data.accountStatus == 'PENDING_AUTHORITY_VERIFICATION'
             && resource.data.isActive == false
           )
         );
+
+      allow update: if isAuthorityVerificationAccountUpdate(userId)
+        || isAuthorityComplianceAccountUpdate(userId);
 
       allow read, write: if isAdmin();
     }
@@ -170,7 +250,7 @@ service cloud.firestore {
           ])
         )
         || (
-          (isAdmin() || authorityCanAccessProfessional(userId))
+          (isAdmin() || canVerifyProfessional(userId))
           && request.resource.data.userId == resource.data.userId
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
             'reviewedAt',
@@ -179,6 +259,11 @@ service cloud.firestore {
             'reviewNotes',
             'submissionStatus'
           ])
+          && request.resource.data.submissionStatus in [
+            'approved',
+            'rejected',
+            'more_information_required'
+          ]
         )
       );
 
@@ -196,7 +281,8 @@ service cloud.firestore {
       allow update: if isSignedIn() && (
         (request.auth.uid == userId && professionalVerificationFieldsUnchanged())
         || isAdmin()
-        || isAdminScopedForProfile(resource.data.primaryCadre)
+        || isAuthorityVerificationProfileUpdate(resource.data.primaryCadre)
+        || isAuthorityComplianceProfileUpdate(resource.data.primaryCadre)
       );
       allow delete: if isAdmin();
     }
