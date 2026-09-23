@@ -151,6 +151,15 @@ service cloud.firestore {
       ]);
     }
 
+    function verifiedProfessionalIdentityFieldsUnchanged() {
+      return resource.data.credentialVerificationStatus != 'verified'
+        || (
+          request.resource.data.fullName == resource.data.fullName
+          && request.resource.data.primaryCadre == resource.data.primaryCadre
+          && request.resource.data.registrationNumber == resource.data.registrationNumber
+        );
+    }
+
     match /users/{userId} {
       allow read: if isSignedIn() && request.auth.uid == userId;
 
@@ -304,6 +313,7 @@ service cloud.firestore {
         (
           request.auth.uid == userId
           && professionalVerificationFieldsUnchanged()
+          && verifiedProfessionalIdentityFieldsUnchanged()
           && request.resource.data.isDirectoryVisible
             == (
               get(/databases/$(database)/documents/users/$(userId)).data.isActive == true
