@@ -53,6 +53,7 @@ interface VerificationDoc {
   reviewedByUid?: string;
   reviewedByBody?: string;
   reviewNotes?: string;
+  submissionStatus?: 'pending_review' | 'approved' | 'rejected' | 'more_information_required';
 }
 
 export const BodyAdminConsole: React.FC = () => {
@@ -490,7 +491,9 @@ export const BodyAdminConsole: React.FC = () => {
   }
 
   // Segment queues based on filters/conditions
-  const currentQueue = profiles.filter(p => p.credentialVerificationStatus === 'pending_review');
+  const currentQueue = profiles.filter(
+    p => verificationDocs[p.id]?.submissionStatus === 'pending_review'
+  );
   
   const verifiedProfiles = profiles.filter(p => p.credentialVerificationStatus === 'verified');
   
