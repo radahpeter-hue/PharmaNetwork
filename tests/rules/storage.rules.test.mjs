@@ -12,7 +12,7 @@ import {
 } from 'firebase/storage';
 import { readFile } from 'node:fs/promises';
 
-const projectId = 'demo-pharmanetwork-storage';
+const projectId = 'demo-pharmanetwork';
 let testEnv;
 
 const seedFirestore = async (callback) => {
