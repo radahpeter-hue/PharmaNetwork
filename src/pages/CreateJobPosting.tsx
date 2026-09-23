@@ -31,12 +31,6 @@ const CreateJobPosting: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [toast, setToast] = useState({ isVisible: false, message: '', type: 'success' as ToastType });
 
-  // Access check
-  if (loading) return null;
-  if (!user || userAccount?.accountType !== 'organisation') {
-    return <Navigate to="/dashboard" replace />;
-  }
-
   const orgProfile = profile as OrganisationProfile;
   const organisations = orgProfile?.organisations || [];
 
@@ -59,6 +53,13 @@ const CreateJobPosting: React.FC = () => {
     };
     fetchActiveCount();
   }, [user]);
+
+  // Access check
+  if (loading) return null;
+  if (!user || userAccount?.accountType !== 'organisation') {
+    return <Navigate to="/dashboard" replace />;
+  }
+
 
   const selectedOrg = organisations.find(o => o.id === selectedOrgId) || organisations[0];
 
