@@ -1,3 +1,5 @@
+import type { PrimaryCadre } from './types';
+
 export const UGANDA_DISTRICTS = [
   "Abim", "Adjumani", "Agago", "Alebtong", "Amolatar", "Amudat", "Amuria", "Amuru", "Apac", "Arua",
   "Budaka", "Bududa", "Bugiri", "Bugweri", "Buhweju", "Buikwe", "Bukedea", "Bukomansimbi", "Bukwo", "Bulambuli", "Buliisa", "Bundibugyo", "Bunyangabu", "Bushenyi", "Busia", "Butaleja", "Butambala", "Butebo", "Buvuma", "Buyende",
@@ -5,20 +7,35 @@ export const UGANDA_DISTRICTS = [
   "Lamwo", "Lira", "Luuka", "Lwengo", "Lyantonde", "Madi-Okollo", "Manafwa", "Maracha", "Masaka", "Masindi", "Mayuge", "Mbale", "Mbarara", "Mitooma", "Mityana", "Moroto", "Moyo", "Mpigi", "Mubende", "Mukono", "Nabilatuk", "Nakapiripirit", "Nakaseke", "Nakasongola", "Namayingo", "Namisindwa", "Namutumba", "Napak", "Nebbi", "Ngora", "Ntoroko", "Ntungamo", "Nwoya", "Obongi", "Omoro", "Otuke", "Oyam", "Pader", "Pakwach", "Pallisa", "Rakai", "Rubanda", "Rubirizi", "Rukiga", "Rukungiri", "Sembabule", "Serere", "Sheema", "Sironko", "Soroti", "Tororo", "Wakiso", "Yumbe", "Zombo"
 ].sort();
 
-export const PHARMA_CADRES = [
-  "Registered Pharmacist",
-  "Pharmacy Technician",
-  "Pharmacy Assistant / Dispenser",
-  "Drug Shop Auxiliary Staff",
-  "QA/QC Officer",
-  "Procurement Officer",
-  "Medical Sales Representative",
-  "Pharmacovigilance Officer",
-  "Regulatory Affairs Officer",
-  "Production Personnel",
-  "Stores Officer / Manager",
-  "Other"
+export const PROFESSIONAL_CADRES: Array<{ id: PrimaryCadre; label: string }> = [
+  { id: 'pharmacist', label: 'Registered Pharmacist' },
+  { id: 'pharmacy_technician', label: 'Pharmacy Technician' },
+  { id: 'pharmacy_assistant', label: 'Pharmacy Assistant' },
+  { id: 'dispenser', label: 'Dispenser' },
+  { id: 'drug_shop_auxiliary', label: 'Drug Shop Auxiliary Staff' },
+  { id: 'nurse', label: 'Nurse' },
+  { id: 'midwife', label: 'Midwife' },
+  { id: 'clinical_officer', label: 'Clinical Officer' },
+  { id: 'medical_laboratory_professional', label: 'Medical Laboratory Professional' },
+  { id: 'physiotherapist', label: 'Physiotherapist' },
+  { id: 'radiographer', label: 'Radiographer' },
+  { id: 'occupational_therapist', label: 'Occupational Therapist' },
+  { id: 'nutritionist_dietitian', label: 'Nutritionist / Dietitian' },
+  { id: 'medical_practitioner', label: 'Medical Practitioner' },
+  { id: 'dental_practitioner', label: 'Dental Practitioner' },
+  { id: 'other_allied_health_professional', label: 'Other Allied Health Professional' },
+  { id: 'qa_qc_officer', label: 'QA/QC Officer' },
+  { id: 'procurement_officer', label: 'Procurement Officer' },
+  { id: 'medical_sales_rep', label: 'Medical Sales Representative' },
+  { id: 'pharmacovigilance_officer', label: 'Pharmacovigilance Officer' },
+  { id: 'regulatory_affairs', label: 'Regulatory Affairs Officer' },
+  { id: 'production_personnel', label: 'Production Personnel' },
+  { id: 'stores_officer', label: 'Stores Officer' },
+  { id: 'stores_manager', label: 'Stores Manager' },
+  { id: 'other', label: 'Other' }
 ];
+
+export const PHARMA_CADRES = PROFESSIONAL_CADRES.map(cadre => cadre.label);
 
 export const EMPLOYMENT_TYPES = [
   { id: 'full_time', label: 'Full-time' },
