@@ -6,6 +6,7 @@ on:
       - "feature/batch5-profiles-directories"
     paths:
       - "package.json"
+      - ".github/workflows/dependency-lock.yml"
 
 permissions:
   contents: write
@@ -43,4 +44,5 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add package-lock.json
           git commit -m "deps: refresh audited dependency lock [skip ci]"
-          git push
+          git pull --rebase origin "$GITHUB_REF_NAME"
+          git push origin HEAD:"$GITHUB_REF_NAME"
