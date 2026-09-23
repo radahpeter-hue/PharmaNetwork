@@ -23,8 +23,13 @@ service cloud.firestore {
     }
 
     function authorityAdminHasCadre(cadre) {
+      let adminRecord = get(/databases/$(database)/documents/professionalAuthorityAdmins/$(request.auth.uid)).data;
       return isAuthorityAdmin()
-        && (cadre in get(/databases/$(database)/documents/professionalAuthorityAdmins/$(request.auth.uid)).data.scopedCadres);
+        && (cadre in adminRecord.scopedCadres)
+        && exists(/databases/$(database)/documents/professionalAuthorities/$(adminRecord.authorityId))
+        && (
+          cadre in get(/databases/$(database)/documents/professionalAuthorities/$(adminRecord.authorityId)).data.governedCadres
+        );
     }
 
     function authorityRoleIsOneOf(roles) {
@@ -189,7 +194,12 @@ service cloud.firestore {
     }
 
     match /professionalAuthorities/{authorityId} {
-      allow read: if isAdmin() || isAuthorityAdmin();
+      allow read: if isAdmin()
+        || (
+          isAuthorityAdmin()
+          && authorityId
+            == get(/databases/$(database)/documents/professionalAuthorityAdmins/$(request.auth.uid)).data.authorityId
+        );
       allow write: if isAdmin();
     }
 
