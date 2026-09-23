@@ -376,6 +376,7 @@ export const PublicProfile: React.FC = () => {
       </div>
     </div>
   );
+};
 
 const OrganisationMemberProfile: React.FC<{
   profile: OrganisationProfile;
@@ -472,5 +473,3 @@ const OrganisationMemberProfile: React.FC<{
     </div>
   </div>
 );
-
-};
