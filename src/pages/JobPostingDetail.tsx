@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { db } from '../lib/firebase';
-import { doc, getDoc, updateDoc, increment, collection, addDoc, query, where, getDocs, Timestamp } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, increment, collection, query, where, getDocs, runTransaction, serverTimestamp } from 'firebase/firestore';
 import { Button } from '../components/Button';
 import { JobPosting } from '../types';
 import { Toast, ToastType } from '../components/Toast';
@@ -76,13 +76,9 @@ const JobPostingDetail: React.FC = () => {
 
     const checkInterest = async () => {
       if (!user || userAccount?.accountType !== 'individual' || !postingId) return;
-      const q = query(
-        collection(db, 'interestEvents'),
-        where('actorId', '==', user.uid),
-        where('targetId', '==', postingId)
-      );
-      const snap = await getDocs(q);
-      setHasInterest(!snap.empty);
+      const eventId = `job_interest_${postingId}_${user.uid}`;
+      const snap = await getDoc(doc(db, 'interestEvents', eventId));
+      setHasInterest(snap.exists());
     };
 
     fetchJob();
@@ -90,30 +86,42 @@ const JobPostingDetail: React.FC = () => {
   }, [postingId, user, userAccount]);
 
   const handleInterest = async () => {
-    if (!job || !user || hasInterest) return;
+    if (!job?.id || !user || hasInterest || userAccount?.accountType !== 'individual') return;
 
     try {
-      // 1. Log interest event
-      await addDoc(collection(db, 'interestEvents'), {
-        actorId: user.uid,
-        targetId: job.id,
-        type: 'job_interest',
-        timestamp: Timestamp.now()
-      });
+      const eventId = `job_interest_${job.id}_${user.uid}`;
+      const eventRef = doc(db, 'interestEvents', eventId);
+      const jobRef = doc(db, 'jobPostings', job.id);
 
-      // 2. Increment count
-      await updateDoc(doc(db, 'jobPostings', job.id!), {
-        interestCount: increment(1)
+      const created = await runTransaction(db, async transaction => {
+        const existingEvent = await transaction.get(eventRef);
+        if (existingEvent.exists()) return false;
+
+        transaction.set(eventRef, {
+          actorId: user.uid,
+          targetId: job.id,
+          postOwnerUserId: job.organisationUserId,
+          type: 'job_interest',
+          timestamp: serverTimestamp()
+        });
+
+        transaction.update(jobRef, {
+          interestCount: increment(1)
+        });
+
+        return true;
       });
 
       setHasInterest(true);
-      setToast({ isVisible: true, message: 'Expression of interest logged.', type: 'success' });
+      if (created) {
+        setJob(current => current ? { ...current, interestCount: (current.interestCount || 0) + 1 } : current);
+        setToast({ isVisible: true, message: 'Expression of interest logged.', type: 'success' });
+      }
 
-      // 3. Open contact link
       const message = encodeURIComponent(`Hello, I saw your job posting for "${job.title}" on PharmaNetwork Uganda and am interested in applying. My name is ${(profile as any)?.fullName || 'a professional'}.`);
       if (job.contactMethod === 'whatsapp') {
         const phone = job.contactDetail.replace(/\D/g, '');
-        window.open(`https://wa.me/${phone}?text=${message}`, '_blank');
+        window.open(`https://wa.me/${phone}?text=${message}`, '_blank', 'noopener,noreferrer');
       } else {
         window.location.href = `mailto:${job.contactDetail}?subject=${encodeURIComponent(`Interest in ${job.title}`)}&body=${message}`;
       }
