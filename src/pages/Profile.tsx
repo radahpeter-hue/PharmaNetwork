@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Button } from '../components/Button';
 import { IndividualProfile, OrganisationProfile } from '../types';
@@ -22,7 +23,7 @@ import {
   Loader2,
   Clock
 } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion } from 'motion/react';
 import { cn } from '../lib/utils';
 import { doc, setDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../lib/firebase';
@@ -30,7 +31,7 @@ import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 
 const Profile: React.FC = () => {
   const { user, userAccount, profile, refreshUserData } = useAuth();
-  const [isEditing, setIsEditing] = useState(false);
+  const navigate = useNavigate();
 
   // Verification request workflow states
   const [uploading, setUploading] = useState(false);
@@ -74,16 +75,23 @@ const Profile: React.FC = () => {
          <div className="absolute top-0 right-0 w-64 h-64 bg-primary/20 blur-3xl rounded-full translate-x-32 -translate-y-32"></div>
       </div>
 
+      {isIndividual && completeness < 60 && (
+        <div className="mb-8 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <span>Your profile is not yet eligible for directory visibility. Complete it to at least 60% and maintain ACTIVE professional status.</span>
+          <button onClick={() => navigate('/profile/edit')} className="font-bold underline underline-offset-2">Complete profile</button>
+        </div>
+      )}
+
       <div className="bg-white rounded-3xl shadow-xl border border-zinc-100 overflow-hidden">
         {/* Cover Placeholder */}
         <div className="h-40 bg-gradient-to-r from-primary/80 to-primary-light relative">
            <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-10"></div>
-           <button 
-             onClick={() => setIsEditing(!isEditing)}
+           <button
+             onClick={() => navigate(isIndividual ? '/profile/edit' : '/profile/edit/organisation')}
              className="absolute bottom-4 right-6 bg-white/20 hover:bg-white/30 backdrop-blur-md text-white px-4 py-2 rounded-full text-xs font-bold flex items-center gap-2 transition-all"
            >
               <Edit size={14} />
-              {isEditing ? 'Cancel Edit' : 'Edit Profile'}
+              Edit Profile
            </button>
         </div>
 
@@ -140,25 +148,7 @@ const Profile: React.FC = () => {
             </div>
           </div>
 
-          <AnimatePresence mode="wait">
-            {isEditing ? (
-              <motion.div 
-                key="editing"
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                className="bg-zinc-50 p-8 rounded-2xl border border-dashed border-zinc-200 text-center"
-              >
-                <div className="w-16 h-16 bg-zinc-100 rounded-full flex items-center justify-center mx-auto mb-4 text-zinc-400">
-                   <Edit size={24} />
-                </div>
-                <h3 className="font-bold text-zinc-900 mb-2">Edit Mode Coming Soon</h3>
-                <p className="text-zinc-500 text-sm mb-6">Full profile editing is being built for Week 2.</p>
-                <Button size="sm" onClick={() => setIsEditing(false)}>Back to View</Button>
-              </motion.div>
-            ) : (
-              <motion.div 
-                key="view"
+          <motion.div
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -10 }}
@@ -183,7 +173,7 @@ const Profile: React.FC = () => {
                            <>
                               <DetailItem icon={Calendar} label="Years Experience" value={(profile as IndividualProfile).yearsExperience.replace('_', ' ')} />
                               <DetailItem icon={Award} label="Highest Qualification" value={(profile as IndividualProfile).qualification} />
-                              <DetailItem icon={FileText} label="Registration" value={(profile as IndividualProfile).registrationNumber || "Self-declared"} />
+                              <DetailItem icon={FileText} label="Registration" value={(profile as IndividualProfile).registrationNumber || "Not provided"} />
                               <DetailItem icon={Phone} label="Contact" value={(profile as IndividualProfile).phone} />
                            </>
                          ) : (
@@ -522,9 +512,7 @@ const Profile: React.FC = () => {
                      </div>
                    )}
                 </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
+          </motion.div>
         </div>
       </div>
     </div>
