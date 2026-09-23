@@ -8,7 +8,10 @@ import {
 import {
   doc,
   getDoc,
+  increment,
+  runTransaction,
   setDoc,
+  Timestamp,
   updateDoc
 } from 'firebase/firestore';
 import { readFile } from 'node:fs/promises';
@@ -290,5 +293,120 @@ test('platform admin can manage authority records', async () => {
     id: 'authority-2',
     governedCadres: ['pharmacist'],
     isActive: true
+  }));
+});
+
+
+test('job interest count can increase only with a first deterministic interest event', async () => {
+  const now = Date.now();
+
+  await seed(async db => {
+    await setDoc(doc(db, 'users', 'professional-interest'), {
+      id: 'professional-interest',
+      accountType: 'individual',
+      accountClass: 'professional',
+      accountStatus: 'ACTIVE',
+      isActive: true,
+      isVerified: true
+    });
+    await setDoc(doc(db, 'jobPostings', 'job-1'), {
+      organisationUserId: 'organisation-owner',
+      status: 'active',
+      expiresAt: Timestamp.fromMillis(now + 86400000),
+      interestCount: 0
+    });
+  });
+
+  const db = testEnv.authenticatedContext('professional-interest').firestore();
+  const eventRef = doc(db, 'interestEvents', 'job_interest__job-1__professional-interest');
+  const jobRef = doc(db, 'jobPostings', 'job-1');
+
+  await assertFails(updateDoc(jobRef, { interestCount: increment(1) }));
+
+  await assertSucceeds(runTransaction(db, async transaction => {
+    transaction.set(eventRef, {
+      actorId: 'professional-interest',
+      targetId: 'job-1',
+      type: 'job_interest',
+      timestamp: Timestamp.now()
+    });
+    transaction.update(jobRef, { interestCount: increment(1) });
+  }));
+
+  await assertFails(updateDoc(jobRef, { interestCount: increment(1) }));
+});
+
+test('organisation cannot create a job-interest event intended for professionals', async () => {
+  const now = Date.now();
+
+  await seed(async db => {
+    await setDoc(doc(db, 'users', 'organisation-interest'), {
+      id: 'organisation-interest',
+      accountType: 'organisation',
+      accountClass: 'organisation',
+      accountStatus: 'ACTIVE',
+      isActive: true,
+      isVerified: false
+    });
+    await setDoc(doc(db, 'jobPostings', 'job-2'), {
+      organisationUserId: 'another-organisation',
+      status: 'active',
+      expiresAt: Timestamp.fromMillis(now + 86400000),
+      interestCount: 0
+    });
+  });
+
+  const db = testEnv.authenticatedContext('organisation-interest').firestore();
+
+  await assertFails(setDoc(
+    doc(db, 'interestEvents', 'job_interest__job-2__organisation-interest'),
+    {
+      actorId: 'organisation-interest',
+      targetId: 'job-2',
+      type: 'job_interest',
+      timestamp: Timestamp.now()
+    }
+  ));
+});
+
+test('availability interest is restricted to active organisation accounts and deterministic event IDs', async () => {
+  const now = Date.now();
+
+  await seed(async db => {
+    await setDoc(doc(db, 'users', 'organisation-1'), {
+      id: 'organisation-1',
+      accountType: 'organisation',
+      accountClass: 'organisation',
+      accountStatus: 'ACTIVE',
+      isActive: true,
+      isVerified: false
+    });
+    await setDoc(doc(db, 'availabilityPosts', 'availability-1'), {
+      individualUserId: 'professional-owner',
+      status: 'active',
+      expiresAt: Timestamp.fromMillis(now + 86400000),
+      interestCount: 0
+    });
+  });
+
+  const db = testEnv.authenticatedContext('organisation-1').firestore();
+  const postRef = doc(db, 'availabilityPosts', 'availability-1');
+  const eventRef = doc(db, 'interestEvents', 'availability_interest__availability-1__organisation-1');
+
+  await assertFails(setDoc(doc(db, 'interestEvents', 'random-id'), {
+    actorId: 'organisation-1',
+    targetId: 'availability-1',
+    type: 'availability_interest',
+    timestamp: Timestamp.now()
+  }));
+
+  await assertSucceeds(runTransaction(db, async transaction => {
+    transaction.set(eventRef, {
+      actorId: 'organisation-1',
+      targetId: 'availability-1',
+      type: 'availability_interest',
+      timestamp: Timestamp.now()
+    });
+    transaction.update(postRef, { interestCount: increment(1) });
   }));
 });
