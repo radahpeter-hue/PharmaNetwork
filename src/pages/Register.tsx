@@ -24,11 +24,8 @@ import { cn } from '../lib/utils';
 import { useAuth } from '../context/AuthContext';
 import { AccountType, AvailabilityStatus, EmploymentType, OrganizationType, PrimaryCadre } from '../types';
 import { calculateProfessionalProfileCompleteness } from '../lib/profileCompleteness';
+import { PROFESSIONAL_CADRES, UGANDA_UGANDA_DISTRICTS } from '../constants';
 
-const DISTRICTS = [
-  'Kampala', 'Wakiso', 'Mukono', 'Entebbe', 'Gulu', 'Mbarara', 'Jinja', 'Mbale', 'Arua', 'Lira', 
-  'Masaka', 'Fort Portal', 'Soroti', 'Kabale', 'Kasese', 'Hoima', 'Tororo', 'Iganga', 'Moroto', 'Kitgum', 'Other'
-];
 
 type RegistrationStep = 1 | 2 | 3 | 4;
 
@@ -59,7 +56,7 @@ const Register: React.FC = () => {
   const [individualDetails, setIndividualDetails] = useState({
     primaryCadre: 'pharmacist' as PrimaryCadre,
     registrationNumber: '',
-    qualification: 'Bachelor of Pharmacy BPharm',
+    qualification: '',
     qualificationYear: new Date().getFullYear(),
     yearsExperience: 'less_than_1',
     areasOfPractice: [] as string[],
@@ -285,7 +282,7 @@ const Register: React.FC = () => {
                      value={baseInfo.district}
                      onChange={e => setBaseInfo({...baseInfo, district: e.target.value})}
                    >
-                     {DISTRICTS.map(d => <option key={d} value={d}>{d}</option>)}
+                     {UGANDA_DISTRICTS.map(d => <option key={d} value={d}>{d}</option>)}
                    </select>
                  </div>
                  <div className="space-y-2">
@@ -346,7 +343,7 @@ const Register: React.FC = () => {
 
                <div className="space-y-4 mb-12">
                   {[
-                    { id: 'pharmacy_professional', label: 'I am a pharmacy professional (pharmacist, technician, assistant, dispenser)' },
+                    { id: 'regulated_health_professional', label: 'I am a regulated health professional' },
                     { id: 'pharmacy_owner', label: 'I own or manage a pharmacy or pharmaceutical business' },
                     { id: 'manufacturing', label: 'I work in pharmaceutical manufacturing or production' },
                     { id: 'import_distribution', label: 'I work in pharmaceutical import, distribution, or wholesale' },
@@ -624,7 +621,7 @@ const OrganisationForm = ({ organisations, setOrganisations, onBack, onNext, hid
 };
 
 const IndividualDetailsForm = ({ roles, details, setDetails, organisations, setOrganisations, onBack, onSubmit, loading, error }: any) => {
-   const isProfessional = roles.includes('pharmacy_professional');
+   const isProfessional = true;
    const isOwner = roles.includes('pharmacy_owner');
 
    return (
@@ -647,34 +644,28 @@ const IndividualDetailsForm = ({ roles, details, setDetails, organisations, setO
                               value={details.primaryCadre}
                               onChange={e => setDetails({...details, primaryCadre: e.target.value})}
                            >
-                              <option value="pharmacist">Registered Pharmacist</option>
-                              <option value="pharmacy_technician">Pharmacy Technician</option>
-                              <option value="pharmacy_assistant">Pharmacy Assistant / Dispenser</option>
-                              <option value="drug_shop_auxiliary">Drug Shop Auxiliary Staff</option>
-                              <option value="other">Other</option>
+                              {PROFESSIONAL_CADRES.map((cadre) => (
+                                <option key={cadre.id} value={cadre.id}>{cadre.label}</option>
+                              ))}
                            </select>
                         </div>
                         <div className="space-y-2">
                            <label className="text-sm font-semibold">Registration Number</label>
                            <input 
                               className="w-full px-4 py-3 bg-white border border-zinc-200 rounded-xl outline-none focus:ring-2 focus:ring-primary"
-                              placeholder="Enter your PSU or NDA number"
+                              placeholder="Enter your professional registration number"
                               value={details.registrationNumber}
                               onChange={e => setDetails({...details, registrationNumber: e.target.value})}
                            />
                         </div>
                         <div className="space-y-2">
                            <label className="text-sm font-semibold">Highest Qualification</label>
-                           <select 
+                           <input
                               className="w-full px-4 py-3 bg-white border border-zinc-200 rounded-xl outline-none focus:ring-2 focus:ring-primary"
+                              placeholder="Enter your highest relevant qualification"
                               value={details.qualification}
                               onChange={e => setDetails({...details, qualification: e.target.value})}
-                           >
-                              <option value="Bachelor of Pharmacy BPharm">Bachelor of Pharmacy BPharm</option>
-                              <option value="Diploma in Pharmacy">Diploma in Pharmacy</option>
-                              <option value="Certificate in Pharmacy">Certificate in Pharmacy</option>
-                              <option value="Enrolled Nurse / Midwife">Enrolled Nurse / Midwife</option>
-                           </select>
+                           />
                         </div>
                         <div className="space-y-2">
                            <label className="text-sm font-semibold">Years Experience</label>
@@ -698,7 +689,7 @@ const IndividualDetailsForm = ({ roles, details, setDetails, organisations, setO
                   <div className="space-y-2">
                      <label className="text-sm font-semibold">Areas of Practice</label>
                      <div className="flex flex-wrap gap-2">
-                        {['Retail / Community', 'Hospital / Clinical', 'Industrial / Manufacturing', 'Wholesale / Distribution', 'Regulatory Affairs', 'Research', 'Drug Shop'].map(area => (
+                        {['Retail / Community', 'Hospital / Clinical', 'Nursing / Midwifery', 'Allied Health', 'Medical / Dental Practice', 'Laboratory Services', 'Industrial / Manufacturing', 'Wholesale / Distribution', 'Regulatory Affairs', 'Research', 'Drug Shop'].map(area => (
                            <button 
                              key={area}
                              onClick={() => {
