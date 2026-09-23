@@ -5,7 +5,7 @@ import { db } from '../lib/firebase';
 import { collection, addDoc, query, where, getDocs, Timestamp } from 'firebase/firestore';
 import { Button } from '../components/Button';
 import { Toast, ToastType } from '../components/Toast';
-import { PHARMA_CADRES, UGANDA_DISTRICTS, EMPLOYMENT_TYPES, CONTACT_METHODS } from '../constants';
+import { PROFESSIONAL_CADRES, UGANDA_DISTRICTS, EMPLOYMENT_TYPES, CONTACT_METHODS } from '../constants';
 import { Briefcase, Building, MapPin, Phone, Mail, Clock, MessageSquare, AlertCircle } from 'lucide-react';
 import { motion } from 'motion/react';
 import { OrganisationProfile } from '../types';
@@ -49,7 +49,14 @@ const CreateJobPosting: React.FC = () => {
         where('status', '==', 'active')
       );
       const snap = await getDocs(q);
-      setActiveJobCount(snap.size);
+      const now = Date.now();
+      const activeCount = snap.docs.filter(jobDoc => {
+        const expiresAt = jobDoc.data().expiresAt;
+        if (!expiresAt) return false;
+        const expiresAtMillis = expiresAt.toMillis ? expiresAt.toMillis() : new Date(expiresAt).getTime();
+        return expiresAtMillis > now;
+      }).length;
+      setActiveJobCount(activeCount);
     };
     fetchActiveCount();
   }, [user]);
@@ -106,7 +113,7 @@ const CreateJobPosting: React.FC = () => {
         organisationName: selectedOrg.organisationName,
         organisationTypes: selectedOrg.organisationTypes,
         organisationDistrict: selectedOrg.district,
-        organisationLogoUrl: '', // Could be added later if storage is implemented
+        organisationLogoUrl: selectedOrg.logoUrl || ''
         ...formData,
         status: 'active',
         createdAt: now,
@@ -130,7 +137,7 @@ const CreateJobPosting: React.FC = () => {
     <div className="max-w-3xl mx-auto px-4 py-12">
       <div className="mb-10">
         <h1 className="text-3xl font-bold text-zinc-900 mb-2">Post a Job Opportunity</h1>
-        <p className="text-zinc-500">Connect with qualified pharmaceutical professionals across Uganda.</p>
+        <p className="text-zinc-500">Connect with qualified professionals across Uganda's pharmaceutical and health-professions network.</p>
       </div>
 
       {isLimitReached && (
@@ -189,7 +196,9 @@ const CreateJobPosting: React.FC = () => {
                 className="w-full border border-zinc-200 rounded-xl px-4 py-3 focus:ring-2 focus:ring-primary outline-none transition-all bg-white"
               >
                 <option value="">Select Cadre</option>
-                {PHARMA_CADRES.map(c => <option key={c} value={c}>{c}</option>)}
+                {PROFESSIONAL_CADRES.map(cadre => (
+                  <option key={cadre.id} value={cadre.id}>{cadre.label}</option>
+                ))}
               </select>
             </div>
 
