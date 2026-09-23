@@ -410,3 +410,99 @@ test('availability interest is restricted to active organisation accounts and de
     transaction.update(postRef, { interestCount: increment(1) });
   }));
 });
+
+
+test('confidential business private details are hidden from other active members', async () => {
+  await seed(async db => {
+    await setDoc(doc(db, 'users', 'seller-private'), {
+      id: 'seller-private',
+      accountType: 'individual',
+      accountClass: 'professional',
+      accountStatus: 'ACTIVE',
+      isActive: true,
+      isVerified: true
+    });
+    await setDoc(doc(db, 'users', 'member-reader'), {
+      id: 'member-reader',
+      accountType: 'individual',
+      accountClass: 'professional',
+      accountStatus: 'ACTIVE',
+      isActive: true,
+      isVerified: true
+    });
+    await setDoc(doc(db, 'businessListings', 'business-private'), {
+      sellerUserId: 'seller-private',
+      isConfidential: true,
+      photoUrls: [],
+      status: 'active'
+    });
+    await setDoc(doc(db, 'businessListingPrivate', 'business-private'), {
+      sellerUserId: 'seller-private',
+      locationDescription: 'Exact private location',
+      contactDetail: '+256700000000'
+    });
+  });
+
+  const readerDb = testEnv.authenticatedContext('member-reader').firestore();
+  const sellerDb = testEnv.authenticatedContext('seller-private').firestore();
+
+  await assertFails(getDoc(doc(readerDb, 'businessListingPrivate', 'business-private')));
+  await assertSucceeds(getDoc(doc(sellerDb, 'businessListingPrivate', 'business-private')));
+});
+
+test('non-confidential business private contact details are available to active members', async () => {
+  await seed(async db => {
+    await setDoc(doc(db, 'users', 'seller-public'), {
+      id: 'seller-public',
+      accountType: 'individual',
+      accountClass: 'professional',
+      accountStatus: 'ACTIVE',
+      isActive: true,
+      isVerified: true
+    });
+    await setDoc(doc(db, 'users', 'member-reader-2'), {
+      id: 'member-reader-2',
+      accountType: 'individual',
+      accountClass: 'professional',
+      accountStatus: 'ACTIVE',
+      isActive: true,
+      isVerified: true
+    });
+    await setDoc(doc(db, 'businessListings', 'business-public'), {
+      sellerUserId: 'seller-public',
+      isConfidential: false,
+      photoUrls: [],
+      status: 'active'
+    });
+    await setDoc(doc(db, 'businessListingPrivate', 'business-public'), {
+      sellerUserId: 'seller-public',
+      locationDescription: 'Member-visible location',
+      contactDetail: '+256711111111'
+    });
+  });
+
+  const readerDb = testEnv.authenticatedContext('member-reader-2').firestore();
+  await assertSucceeds(getDoc(doc(readerDb, 'businessListingPrivate', 'business-public')));
+});
+
+test('business listing rules reject more than three public photo references', async () => {
+  await seed(async db => {
+    await setDoc(doc(db, 'users', 'business-seller'), {
+      id: 'business-seller',
+      accountType: 'individual',
+      accountClass: 'professional',
+      accountStatus: 'ACTIVE',
+      isActive: true,
+      isVerified: true
+    });
+  });
+
+  const db = testEnv.authenticatedContext('business-seller').firestore();
+
+  await assertFails(setDoc(doc(db, 'businessListings', 'too-many-photos'), {
+    sellerUserId: 'business-seller',
+    isConfidential: false,
+    status: 'active',
+    photoUrls: ['1', '2', '3', '4']
+  }));
+});
