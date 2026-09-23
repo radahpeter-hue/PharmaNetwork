@@ -37,9 +37,9 @@ const Login: React.FC = () => {
       }
 
       const userData = userDocSnap.data();
-      if (userData.isActive === false) {
-        await auth.signOut();
-        setError('This account has been deactivated. Please contact support.');
+
+      if (userData.isActive === false || (userData.accountStatus && userData.accountStatus !== 'ACTIVE')) {
+        navigate('/account-status');
         return;
       }
 
