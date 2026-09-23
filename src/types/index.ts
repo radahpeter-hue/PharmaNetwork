@@ -103,6 +103,7 @@ export interface IndividualProfile {
   bio: string;
   profilePhotoUrl?: string;
   cvUrl?: string;
+  cvStoragePath?: string;
   profileCompleteness: number;
   isDirectoryVisible?: boolean;
   createdAt: any;
