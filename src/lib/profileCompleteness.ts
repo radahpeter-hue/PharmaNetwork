@@ -12,6 +12,7 @@ export interface ProfessionalCompletenessInput {
   bio?: string;
   profilePhotoUrl?: string;
   cvUrl?: string;
+  cvStoragePath?: string;
 }
 
 const hasText = (value: unknown) =>
@@ -39,7 +40,7 @@ export const calculateProfessionalProfileCompleteness = (
 
   if (typeof profile.bio === 'string' && profile.bio.trim().length >= 50) score += 10;
   if (hasText(profile.profilePhotoUrl)) score += 10;
-  if (hasText(profile.cvUrl)) score += 5;
+  if (hasText(profile.cvStoragePath) || hasText(profile.cvUrl)) score += 5;
 
   return Math.min(score, 100);
 };
