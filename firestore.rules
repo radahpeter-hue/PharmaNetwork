@@ -496,9 +496,11 @@ service cloud.firestore {
       allow list: if isAdmin();
       allow list: if isActiveMember()
         && resource.data.organisationUserId == request.auth.uid;
+      // Firestore list rules cannot safely prove a client-side clock value against request.time.
+      // Browse queries still filter expiresAt; list authorization therefore enforces status,
+      // while direct document reads enforce both status and wall-clock expiry.
       allow list: if isActiveMember()
-        && resource.data.status == 'active'
-        && resource.data.expiresAt > request.time;
+        && resource.data.status == 'active';
       allow create: if isActiveMember()
         && request.resource.data.organisationUserId == request.auth.uid
         && currentAccountType() == 'organisation'
@@ -566,8 +568,7 @@ service cloud.firestore {
       allow list: if isActiveMember()
         && resource.data.individualUserId == request.auth.uid;
       allow list: if isActiveMember()
-        && resource.data.status == 'active'
-        && resource.data.expiresAt > request.time;
+        && resource.data.status == 'active';
       allow create: if isActiveMember()
         && request.resource.data.individualUserId == request.auth.uid
         && currentAccountType() == 'individual'
@@ -676,11 +677,9 @@ service cloud.firestore {
       allow list: if isActiveMember()
         && resource.data.sellerUserId == request.auth.uid;
       allow list: if isActiveMember()
-        && resource.data.status == 'active'
-        && resource.data.expiresAt > request.time;
+        && resource.data.status == 'active';
       allow list: if isActiveMember()
-        && resource.data.status == 'under_offer'
-        && resource.data.expiresAt > request.time;
+        && resource.data.status == 'under_offer';
       allow create: if isActiveMember()
         && request.resource.data.sellerUserId == request.auth.uid
         && request.resource.data.photoUrls is list
