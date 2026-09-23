@@ -64,6 +64,7 @@ service cloud.firestore {
           'credentialVerifiedByBody',
           'credentialVerifiedByUid',
           'credentialRejectionReason',
+          'isDirectoryVisible',
           'updatedAt'
         ]);
     }
@@ -77,6 +78,7 @@ service cloud.firestore {
           'licenceRenewalDate',
           'licenceExpiryDate',
           'licenceSuspensionReason',
+          'isDirectoryVisible',
           'updatedAt'
         ]);
     }
@@ -145,7 +147,8 @@ service cloud.firestore {
         'practisingLicenceYear',
         'licenceRenewalDate',
         'licenceExpiryDate',
-        'licenceSuspensionReason'
+        'licenceSuspensionReason',
+        'isDirectoryVisible'
       ]);
     }
 
@@ -283,11 +286,17 @@ service cloud.firestore {
     match /individualProfiles/{userId} {
       allow read: if isSignedIn() && (
         request.auth.uid == userId
-        || isActiveMember()
+        || (
+          isActiveMember()
+          && resource.data.isDirectoryVisible == true
+          && resource.data.profileCompleteness >= 60
+        )
         || isAdmin()
         || authorityAdminHasCadre(resource.data.primaryCadre)
       );
-      allow create: if isSignedIn() && request.auth.uid == userId;
+      allow create: if isSignedIn()
+        && request.auth.uid == userId
+        && request.resource.data.isDirectoryVisible == false;
       allow update: if isSignedIn() && (
         (request.auth.uid == userId && professionalVerificationFieldsUnchanged())
         || isAdmin()
