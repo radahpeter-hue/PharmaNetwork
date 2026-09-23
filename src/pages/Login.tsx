@@ -25,8 +25,19 @@ const Login: React.FC = () => {
 
     try {
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
-      
-      // Atomic activation status check immediately after sign-in
+      const tokenResult = await userCredential.user.getIdTokenResult(true);
+
+      if (tokenResult.claims.admin === true) {
+        navigate('/admin');
+        return;
+      }
+
+      if (tokenResult.claims.authority_admin === true) {
+        navigate('/authority-admin');
+        return;
+      }
+
+      // Ordinary member accounts must have a valid PharmaNetwork account record.
       const userDocRef = doc(db, 'users', userCredential.user.uid);
       const userDocSnap = await getDoc(userDocRef);
 
