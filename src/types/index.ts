@@ -16,6 +16,37 @@ export type AccountStatus =
   | 'REJECTED'
   | 'DEACTIVATED_BY_PLATFORM';
 
+export type AuthorityRole =
+  | 'authority_super_admin'
+  | 'verification_officer'
+  | 'compliance_officer'
+  | 'communications_officer'
+  | 'reviewer';
+
+export interface ProfessionalAuthority {
+  id: string;
+  name: string;
+  shortName?: string;
+  governedCadres: PrimaryCadre[];
+  isActive: boolean;
+  createdAt: any;
+  updatedAt: any;
+}
+
+export interface ProfessionalAuthorityAdmin {
+  uid: string;
+  fullName: string;
+  email: string;
+  authorityId: string;
+  authorityName: string;
+  scopedCadres: PrimaryCadre[];
+  role: AuthorityRole;
+  isActive: boolean;
+  notes?: string;
+  addedAt?: any;
+  lastLoginAt?: any;
+}
+
 export type PrimaryCadre = 
   | 'pharmacist' 
   | 'pharmacy_technician' 
