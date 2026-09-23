@@ -25,18 +25,39 @@ import { BodyAdminConsole } from './pages/BodyAdminConsole';
 import { PublicProfile } from './pages/PublicProfile';
 import BrowseProfessionals from './pages/BrowseProfessionals';
 import BrowseOrganisations from './pages/BrowseOrganisations';
+import AccountStatus from './pages/AccountStatus';
 
-const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+const AuthenticatedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user, userAccount, loading } = useAuth();
-  
+
   if (loading) return (
     <div className="min-h-screen flex items-center justify-center">
       <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
     </div>
   );
-  
-  if (!user || !userAccount || userAccount.isActive === false) {
+
+  if (!user || !userAccount) {
     return <Navigate to="/login" state={{ from: window.location.pathname }} />;
+  }
+
+  return <>{children}</>;
+};
+
+const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { user, userAccount, loading } = useAuth();
+
+  if (loading) return (
+    <div className="min-h-screen flex items-center justify-center">
+      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+    </div>
+  );
+
+  if (!user || !userAccount) {
+    return <Navigate to="/login" state={{ from: window.location.pathname }} />;
+  }
+
+  if (userAccount.isActive === false || (userAccount.accountStatus && userAccount.accountStatus !== 'ACTIVE')) {
+    return <Navigate to="/account-status" replace />;
   }
 
   return <>{children}</>;
@@ -143,13 +164,21 @@ function App() {
                   </ProtectedRoute>
                 } 
               />
-              <Route 
-                path="/profile" 
+              <Route
+                path="/account-status"
                 element={
-                  <ProtectedRoute>
+                  <AuthenticatedRoute>
+                    <AccountStatus />
+                  </AuthenticatedRoute>
+                }
+              />
+              <Route
+                path="/profile"
+                element={
+                  <AuthenticatedRoute>
                     <Profile />
-                  </ProtectedRoute>
-                } 
+                  </AuthenticatedRoute>
+                }
               />
               <Route 
                 path="/jobs" 
