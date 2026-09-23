@@ -24,7 +24,7 @@ import { cn } from '../lib/utils';
 import { useAuth } from '../context/AuthContext';
 import { AccountType, AvailabilityStatus, EmploymentType, OrganizationType, PrimaryCadre } from '../types';
 import { calculateProfessionalProfileCompleteness } from '../lib/profileCompleteness';
-import { PROFESSIONAL_CADRES, UGANDA_UGANDA_DISTRICTS } from '../constants';
+import { PROFESSIONAL_CADRES, UGANDA_DISTRICTS } from '../constants';
 
 
 type RegistrationStep = 1 | 2 | 3 | 4;
