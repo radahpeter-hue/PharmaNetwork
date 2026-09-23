@@ -128,6 +128,7 @@ export interface OrganisationProfile {
     about: string;
     branchCount: string;
     isHiring: boolean;
+    logoUrl?: string;
   }[];
   createdAt: any;
   updatedAt: any;
