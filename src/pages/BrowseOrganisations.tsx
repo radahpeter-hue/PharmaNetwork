@@ -33,6 +33,7 @@ interface OrgDetail {
   branchCount?: number | string;
   isHiring?: boolean;
   about?: string;
+  logoUrl?: string;
 }
 
 interface OrganisationCard extends OrgDetail {
@@ -47,9 +48,12 @@ const BrowseOrganisations: React.FC = () => {
   const [organisations, setOrganisations] = useState<OrganisationCard[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('');
   const [selectedDistrict, setSelectedDistrict] = useState('All');
   const [selectedType, setSelectedType] = useState('All');
   const [onlyHiring, setOnlyHiring] = useState(false);
+  const [visibleCount, setVisibleCount] = useState(20);
+  const [showMobileFilters, setShowMobileFilters] = useState(false);
 
   // messaging state
   const [activeChatRecipient, setActiveChatRecipient] = useState<{ id: string; name: string } | null>(null);
@@ -83,6 +87,18 @@ const BrowseOrganisations: React.FC = () => {
     fetchOrganisations();
   }, []);
 
+  useEffect(() => {
+    const timeout = window.setTimeout(() => {
+      setDebouncedSearchQuery(searchQuery.trim());
+    }, 300);
+
+    return () => window.clearTimeout(timeout);
+  }, [searchQuery]);
+
+  useEffect(() => {
+    setVisibleCount(20);
+  }, [debouncedSearchQuery, selectedDistrict, selectedType, onlyHiring]);
+
   const handleClearFilters = () => {
     setSearchQuery('');
     setSelectedDistrict('All');
@@ -98,8 +114,8 @@ const BrowseOrganisations: React.FC = () => {
 
   // Filters operate on individual organisations, not only the first organisation in an account.
   const filteredOrganisations = organisations.filter((organisation) => {
-    if (searchQuery.trim() !== '') {
-      const q = searchQuery.toLowerCase();
+    if (debouncedSearchQuery !== '') {
+      const q = debouncedSearchQuery.toLowerCase();
       const nameMatch = (organisation.organisationName || '').toLowerCase().includes(q);
       const licenceMatch = (organisation.ndaLicenceNumber || '').toLowerCase().includes(q);
       const aboutMatch = (organisation.about || '').toLowerCase().includes(q);
@@ -116,6 +132,13 @@ const BrowseOrganisations: React.FC = () => {
 
     return true;
   });
+
+  const visibleOrganisations = filteredOrganisations.slice(0, visibleCount);
+  const activeFilterCount = [
+    selectedDistrict !== 'All',
+    selectedType !== 'All',
+    onlyHiring
+  ].filter(Boolean).length;
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 min-h-screen">
@@ -135,28 +158,74 @@ const BrowseOrganisations: React.FC = () => {
         )}
       </div>
 
+      <div className="lg:hidden mb-6 space-y-3">
+        <div className="relative">
+          <input
+            type="text"
+            placeholder="Search organisations by name..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full bg-white border border-zinc-200 rounded-2xl pl-11 pr-4 py-3.5 text-sm font-semibold text-zinc-700 outline-none focus:ring-2 focus:ring-primary/20"
+          />
+          <Search className="absolute left-4 top-4 text-zinc-400" size={17} />
+        </div>
+        <button
+          type="button"
+          onClick={() => setShowMobileFilters(true)}
+          className="w-full flex items-center justify-center gap-2 rounded-2xl border border-zinc-200 bg-white py-3 text-sm font-bold text-zinc-700"
+        >
+          <Filter size={16} />
+          Filters{activeFilterCount > 0 ? ` (${activeFilterCount} active)` : ''}
+        </button>
+      </div>
+
+      {showMobileFilters && (
+        <button
+          type="button"
+          aria-label="Close filters"
+          onClick={() => setShowMobileFilters(false)}
+          className="fixed inset-0 z-40 bg-black/40 lg:hidden"
+        />
+      )}
+
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-12 items-start">
         {/* Filter Sidebar */}
-        <div className="lg:col-span-1 space-y-8 bg-white p-6 rounded-3xl border border-zinc-150 shadow-sm sticky top-24">
+        <div className={cn(
+          "space-y-8 bg-white p-6 rounded-3xl border border-zinc-150 shadow-sm",
+          showMobileFilters
+            ? "fixed left-4 right-4 bottom-4 z-50 max-h-[80vh] overflow-y-auto lg:static lg:max-h-none"
+            : "hidden lg:block",
+          "lg:col-span-1 lg:sticky lg:top-24"
+        )}>
           <div className="flex items-center justify-between border-b border-zinc-100 pb-3 mb-2">
             <h3 className="font-extrabold text-zinc-900 flex items-center gap-2 text-sm uppercase tracking-wide">
               <Filter size={16} />
               Refine Search
             </h3>
-            {hasActiveFilters && (
-              <button 
-                onClick={handleClearFilters}
-                className="text-[10px] font-black uppercase text-amber-600 hover:text-amber-700 transition-colors flex items-center gap-1"
+            <div className="flex items-center gap-2">
+              {hasActiveFilters && (
+                <button
+                  onClick={handleClearFilters}
+                  className="text-[10px] font-black uppercase text-amber-600 hover:text-amber-700 transition-colors flex items-center gap-1"
+                >
+                  Clear
+                  <X size={12} />
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => setShowMobileFilters(false)}
+                className="lg:hidden p-1.5 rounded-lg text-zinc-500 hover:bg-zinc-100"
+                aria-label="Close filters"
               >
-                Clear
-                <X size={12} />
+                <X size={16} />
               </button>
-            )}
+            </div>
           </div>
 
           <div className="space-y-5">
             {/* Search Input */}
-            <div>
+            <div className="hidden lg:block">
               <label className="block text-[10px] font-black text-zinc-400 uppercase tracking-widest mb-1.5">Free Search</label>
               <div className="relative">
                 <input
@@ -221,7 +290,7 @@ const BrowseOrganisations: React.FC = () => {
         <div className="lg:col-span-3 space-y-6">
           <div className="flex items-center gap-4 text-sm text-zinc-500 font-medium">
             <span className="bg-primary/5 text-primary-light ring-1 ring-primary/10 px-3 py-1 rounded-full text-xs font-bold">
-              Found {filteredOrganisations.length} Organisations
+              Showing {Math.min(visibleCount, filteredOrganisations.length)} of {filteredOrganisations.length} Organisations
             </span>
           </div>
 
@@ -242,9 +311,9 @@ const BrowseOrganisations: React.FC = () => {
               )}
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
               <AnimatePresence mode="popLayout">
-                {filteredOrganisations.map((o) => {
+                {visibleOrganisations.map((o) => {
                   return (
                     <motion.div
                       key={`${o.ownerUserId}_${o.id}`}
@@ -258,7 +327,11 @@ const BrowseOrganisations: React.FC = () => {
                         {/* Top Card Section */}
                         <div className="flex gap-4 items-start mb-5">
                           <div className="w-14 h-14 bg-primary/10 rounded-2xl flex items-center justify-center shrink-0 group-hover:bg-primary transition-colors text-primary group-hover:text-white font-extrabold text-xl uppercase overflow-hidden">
-                            <Building size={24} />
+                            {o.logoUrl ? (
+                              <img src={o.logoUrl} alt="" className="w-full h-full object-cover" />
+                            ) : (
+                              <Building size={24} />
+                            )}
                           </div>
 
                           <div className="flex-grow min-w-0">
@@ -269,7 +342,7 @@ const BrowseOrganisations: React.FC = () => {
                               {o.ndaLicenceNumber && (
                                 <span className="bg-emerald-50 text-emerald-700 border border-emerald-100 text-[8px] font-black px-1.5 py-0.5 rounded-md flex items-center gap-0.5">
                                   <ShieldCheck size={10} />
-                                  NDA Verified
+                                  Licence number provided
                                 </span>
                               )}
                             </div>
@@ -304,7 +377,7 @@ const BrowseOrganisations: React.FC = () => {
                           </p>
                         ) : (
                           <p className="text-zinc-400/80 text-xs font-semibold line-clamp-3 leading-relaxed mb-6 pb-2">
-                            No narrative description exists. Click to view company profiles or contact them directly.
+                            No organisation description has been added yet.
                           </p>
                         )}
                       </div>
@@ -343,6 +416,14 @@ const BrowseOrganisations: React.FC = () => {
                   );
                 })}
               </AnimatePresence>
+            </div>
+          )}
+
+          {!loading && visibleCount < filteredOrganisations.length && (
+            <div className="flex justify-center pt-2">
+              <Button variant="outline" onClick={() => setVisibleCount(count => count + 20)}>
+                Load more
+              </Button>
             </div>
           )}
         </div>
