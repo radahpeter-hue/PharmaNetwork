@@ -127,7 +127,6 @@ const JobPostingDetail: React.FC = () => {
      if (!job) return;
      try {
        await updateDoc(doc(db, 'jobPostings', job.id!), { status: 'closed' });
-       await updateDoc(doc(db, 'platformStats', 'counts'), { activeOpportunities: increment(-1) });
        setToast({ isVisible: true, message: 'Posting closed.', type: 'success' });
        setTimeout(() => navigate('/my-postings'), 1500);
      } catch (err) {
