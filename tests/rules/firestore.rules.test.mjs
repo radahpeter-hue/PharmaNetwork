@@ -506,3 +506,123 @@ test('business listing rules reject more than three public photo references', as
     photoUrls: ['1', '2', '3', '4']
   }));
 });
+
+
+test('opportunity creation rejects expiry windows beyond the allowed period', async () => {
+  await seed(async db => {
+    await setDoc(doc(db, 'users', 'org-expiry'), {
+      id: 'org-expiry',
+      accountType: 'organisation',
+      accountClass: 'organisation',
+      accountStatus: 'ACTIVE',
+      isActive: true,
+      isVerified: false
+    });
+    await setDoc(doc(db, 'users', 'professional-expiry'), {
+      id: 'professional-expiry',
+      accountType: 'individual',
+      accountClass: 'professional',
+      accountStatus: 'ACTIVE',
+      isActive: true,
+      isVerified: true
+    });
+  });
+
+  const orgDb = testEnv.authenticatedContext('org-expiry').firestore();
+  const professionalDb = testEnv.authenticatedContext('professional-expiry').firestore();
+  const now = Date.now();
+
+  await assertSucceeds(setDoc(doc(orgDb, 'jobPostings', 'job-valid-expiry'), {
+    organisationUserId: 'org-expiry',
+    status: 'active',
+    interestCount: 0,
+    createdAt: Timestamp.fromMillis(now),
+    expiresAt: Timestamp.fromMillis(now + 59 * 24 * 60 * 60 * 1000)
+  }));
+
+  await assertFails(setDoc(doc(orgDb, 'jobPostings', 'job-too-long'), {
+    organisationUserId: 'org-expiry',
+    status: 'active',
+    interestCount: 0,
+    createdAt: Timestamp.fromMillis(now),
+    expiresAt: Timestamp.fromMillis(now + 61 * 24 * 60 * 60 * 1000)
+  }));
+
+  await assertFails(setDoc(doc(professionalDb, 'availabilityPosts', 'availability-too-long'), {
+    individualUserId: 'professional-expiry',
+    status: 'active',
+    interestCount: 0,
+    createdAt: Timestamp.fromMillis(now),
+    expiresAt: Timestamp.fromMillis(now + 61 * 24 * 60 * 60 * 1000)
+  }));
+});
+
+test('posting owners cannot directly rewrite interest counters', async () => {
+  await seed(async db => {
+    await setDoc(doc(db, 'users', 'org-owner-counter'), {
+      id: 'org-owner-counter',
+      accountType: 'organisation',
+      accountClass: 'organisation',
+      accountStatus: 'ACTIVE',
+      isActive: true,
+      isVerified: false
+    });
+    await setDoc(doc(db, 'jobPostings', 'job-counter'), {
+      organisationUserId: 'org-owner-counter',
+      status: 'active',
+      interestCount: 2,
+      createdAt: Timestamp.fromMillis(Date.now() - 1000),
+      expiresAt: Timestamp.fromMillis(Date.now() + 30 * 24 * 60 * 60 * 1000)
+    });
+  });
+
+  const db = testEnv.authenticatedContext('org-owner-counter').firestore();
+
+  await assertFails(updateDoc(doc(db, 'jobPostings', 'job-counter'), {
+    interestCount: 99
+  }));
+
+  await assertSucceeds(updateDoc(doc(db, 'jobPostings', 'job-counter'), {
+    title: 'Updated owner-controlled title'
+  }));
+});
+
+test('business listings enforce 90-day expiry and immutable view count', async () => {
+  await seed(async db => {
+    await setDoc(doc(db, 'users', 'business-rule-owner'), {
+      id: 'business-rule-owner',
+      accountType: 'individual',
+      accountClass: 'professional',
+      accountStatus: 'ACTIVE',
+      isActive: true,
+      isVerified: true
+    });
+  });
+
+  const db = testEnv.authenticatedContext('business-rule-owner').firestore();
+  const now = Date.now();
+
+  await assertSucceeds(setDoc(doc(db, 'businessListings', 'business-valid'), {
+    sellerUserId: 'business-rule-owner',
+    isConfidential: false,
+    photoUrls: [],
+    status: 'active',
+    viewCount: 0,
+    createdAt: Timestamp.fromMillis(now),
+    expiresAt: Timestamp.fromMillis(now + 89 * 24 * 60 * 60 * 1000)
+  }));
+
+  await assertFails(setDoc(doc(db, 'businessListings', 'business-too-long'), {
+    sellerUserId: 'business-rule-owner',
+    isConfidential: false,
+    photoUrls: [],
+    status: 'active',
+    viewCount: 0,
+    createdAt: Timestamp.fromMillis(now),
+    expiresAt: Timestamp.fromMillis(now + 91 * 24 * 60 * 60 * 1000)
+  }));
+
+  await assertFails(updateDoc(doc(db, 'businessListings', 'business-valid'), {
+    viewCount: 100
+  }));
+});
