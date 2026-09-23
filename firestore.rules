@@ -12,11 +12,14 @@ service cloud.firestore {
     }
 
     function isAdmin() {
-      return isSignedIn() && request.auth.token.admin == true;
+      return isSignedIn()
+        && ('admin' in request.auth.token)
+        && request.auth.token.admin == true;
     }
 
     function isAuthorityAdmin() {
       return isSignedIn()
+        && ('authority_admin' in request.auth.token)
         && request.auth.token.authority_admin == true
         && exists(/databases/$(database)/documents/professionalAuthorityAdmins/$(request.auth.uid))
         && get(/databases/$(database)/documents/professionalAuthorityAdmins/$(request.auth.uid)).data.isActive == true;
