@@ -29,7 +29,7 @@ import { db } from '../lib/firebase';
 import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 
 const Profile: React.FC = () => {
-  const { user, profile } = useAuth();
+  const { user, userAccount, profile, refreshUserData } = useAuth();
   const [isEditing, setIsEditing] = useState(false);
 
   // Verification request workflow states
@@ -272,6 +272,14 @@ const Profile: React.FC = () => {
                            submissionType: 'initial_verification',
                            submissionStatus: 'pending_review'
                          }, { merge: true });
+
+                         if (userAccount?.accountStatus === 'PENDING_PROFILE') {
+                           await updateDoc(doc(db, 'users', user!.uid), {
+                             accountStatus: 'PENDING_AUTHORITY_VERIFICATION',
+                             updatedAt: serverTimestamp()
+                           });
+                           await refreshUserData();
+                         }
 
                          setSuccessMsg("Your verification documents have been submitted for authority review.");
                        } catch (err: any) {
