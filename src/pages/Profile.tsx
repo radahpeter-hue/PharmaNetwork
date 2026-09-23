@@ -27,7 +27,7 @@ import { motion } from 'motion/react';
 import { cn } from '../lib/utils';
 import { doc, setDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../lib/firebase';
-import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { getStorage, ref, uploadBytes } from 'firebase/storage';
 
 const Profile: React.FC = () => {
   const { user, userAccount, profile, refreshUserData } = useAuth();
@@ -246,17 +246,15 @@ const Profile: React.FC = () => {
                          const pracRef = ref(storage, `verificationDocs/${user!.uid}/practising_certificate_${currentYear}`);
 
                          const regUpload = await uploadBytes(regRef, regFile);
-                         const regUrl = await getDownloadURL(regUpload.ref);
                          const pracUpload = await uploadBytes(pracRef, pracFile);
-                         const pracUrl = await getDownloadURL(pracUpload.ref);
 
                          // Verification submission is evidence only. It does not change
                          // authoritative professional verification/licence fields.
                          const vdRef = doc(db, 'verificationDocuments', user!.uid);
                          await setDoc(vdRef, {
                            userId: user!.uid,
-                           registrationCertificateUrl: regUrl,
-                           practisingCertificateUrl: pracUrl,
+                           registrationCertificatePath: regUpload.ref.fullPath,
+                           practisingCertificatePath: pracUpload.ref.fullPath,
                            submittedAt: serverTimestamp(),
                            submittedForYear: currentYear,
                            submissionType: 'initial_verification',
@@ -304,12 +302,11 @@ const Profile: React.FC = () => {
                          const currentYear = new Date().getFullYear();
                          const pracRef = ref(storage, `verificationDocs/${user!.uid}/practising_certificate_${currentYear}`);
                          const uploadSnap = await uploadBytes(pracRef, newPracFile);
-                         const newPracUrl = await getDownloadURL(uploadSnap.ref);
 
                          const vdRef = doc(db, 'verificationDocuments', user!.uid);
                          await setDoc(vdRef, {
                            userId: user!.uid,
-                           practisingCertificateUrl: newPracUrl,
+                           practisingCertificatePath: uploadSnap.ref.fullPath,
                            submittedAt: serverTimestamp(),
                            submittedForYear: currentYear,
                            submissionType: 'annual_renewal',
