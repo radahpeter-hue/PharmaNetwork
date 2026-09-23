@@ -79,6 +79,7 @@ type EditableForm = {
   bio: string;
   profilePhotoUrl?: string;
   cvUrl?: string;
+  cvStoragePath?: string;
 };
 
 const EditProfessionalProfile: React.FC = () => {
@@ -105,7 +106,8 @@ const EditProfessionalProfile: React.FC = () => {
     areasOfPractice: current.areasOfPractice || [],
     bio: current.bio || '',
     profilePhotoUrl: current.profilePhotoUrl,
-    cvUrl: current.cvUrl
+    cvUrl: current.cvUrl,
+    cvStoragePath: current.cvStoragePath
   });
 
   const [photoFile, setPhotoFile] = useState<File | null>(null);
@@ -190,6 +192,7 @@ const EditProfessionalProfile: React.FC = () => {
       const storage = getStorage();
       let profilePhotoUrl = form.profilePhotoUrl || '';
       let cvUrl = form.cvUrl || '';
+      let cvStoragePath = form.cvStoragePath || '';
 
       if (photoFile) {
         const photoRef = ref(storage, `profilePhotos/${user.uid}/photo.jpg`);
@@ -200,17 +203,20 @@ const EditProfessionalProfile: React.FC = () => {
       if (cvFile) {
         const cvRef = ref(storage, `cvFiles/${user.uid}/cv.pdf`);
         const uploaded = await uploadBytes(cvRef, cvFile, { contentType: 'application/pdf' });
-        cvUrl = await getDownloadURL(uploaded.ref);
+        cvStoragePath = uploaded.ref.fullPath;
+        cvUrl = '';
       } else if (removeCv) {
         const cvRef = ref(storage, `cvFiles/${user.uid}/cv.pdf`);
         await deleteObject(cvRef).catch(() => undefined);
+        cvStoragePath = '';
         cvUrl = '';
       }
 
       const completeness = calculateProfessionalProfileCompleteness({
         ...form,
         profilePhotoUrl,
-        cvUrl
+        cvUrl,
+        cvStoragePath
       });
 
       const isDirectoryVisible = userAccount.isActive === true && completeness >= 60;
@@ -230,6 +236,7 @@ const EditProfessionalProfile: React.FC = () => {
         bio: form.bio.trim(),
         profilePhotoUrl,
         cvUrl,
+        cvStoragePath,
         profileCompleteness: completeness,
         isDirectoryVisible,
         updatedAt: serverTimestamp()
@@ -391,7 +398,7 @@ const EditProfessionalProfile: React.FC = () => {
               <div className="rounded-2xl border border-zinc-200 p-4">
                 <div className="flex items-center gap-2 text-sm font-semibold">
                   <FileText size={18} className="text-primary" />
-                  {cvFile ? cvFile.name : (form.cvUrl && !removeCv ? 'CV uploaded' : 'No CV uploaded')}
+                  {cvFile ? cvFile.name : ((form.cvStoragePath || form.cvUrl) && !removeCv ? 'CV uploaded' : 'No CV uploaded')}
                 </div>
                 <div className="flex flex-wrap gap-2 mt-4">
                   <label className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-zinc-200 text-xs font-bold cursor-pointer hover:bg-zinc-50">
@@ -399,7 +406,7 @@ const EditProfessionalProfile: React.FC = () => {
                     Upload CV
                     <input type="file" accept="application/pdf" hidden onChange={e => handleCv(e.target.files?.[0])} />
                   </label>
-                  {form.cvUrl && !removeCv && (
+                  {(form.cvStoragePath || form.cvUrl) && !removeCv && (
                     <button type="button" onClick={() => { setRemoveCv(true); setCvFile(null); }} className="inline-flex items-center gap-1 px-3 py-2 rounded-xl text-xs font-bold text-rose-600 bg-rose-50">
                       <X size={14} />
                       Remove CV
