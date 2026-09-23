@@ -137,6 +137,7 @@ const Register: React.FC = () => {
           bio: individualDetails.bio,
           roles: individualRoles,
           profileCompleteness: calculateCompleteness('individual'),
+          isDirectoryVisible: false,
           createdAt: serverTimestamp(),
           updatedAt: serverTimestamp()
         });
