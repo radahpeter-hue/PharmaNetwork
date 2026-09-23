@@ -3,6 +3,7 @@ import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { db } from '../lib/firebase';
 import { doc, getDoc } from 'firebase/firestore';
 import { IndividualProfile, OrganisationProfile } from '../types';
+import { openProtectedStorageFile } from '../lib/storageAccess';
 import { Button } from '../components/Button';
 import { ReportButton } from '../components/ReportButton';
 import { 
@@ -67,6 +68,22 @@ export const PublicProfile: React.FC = () => {
       navigate(-1);
     } else {
       navigate('/dashboard');
+    }
+  };
+
+  const openCv = async (profile: IndividualProfile) => {
+    try {
+      if (profile.cvStoragePath) {
+        await openProtectedStorageFile(profile.cvStoragePath, 'professional-cv.pdf');
+        return;
+      }
+
+      if (profile.cvUrl) {
+        window.open(profile.cvUrl, '_blank', 'noopener,noreferrer');
+      }
+    } catch (error) {
+      console.error('Unable to open CV:', error);
+      alert('Unable to open this CV. Please try again.');
     }
   };
 
@@ -229,6 +246,19 @@ export const PublicProfile: React.FC = () => {
                   <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block mb-0.5">Qualification</label>
                   <p className="text-zinc-950">{indProfile?.qualification || 'Not provided'}</p>
                 </div>
+                {(indProfile?.cvStoragePath || indProfile?.cvUrl) && (
+                  <div>
+                    <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block mb-1.5">Curriculum Vitae</label>
+                    <button
+                      type="button"
+                      onClick={() => indProfile && openCv(indProfile)}
+                      className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-zinc-200 bg-zinc-50 hover:bg-zinc-100 text-xs font-bold text-zinc-700"
+                    >
+                      <FileText size={14} className="text-primary" />
+                      Open CV
+                    </button>
+                  </div>
+                )}
                 <div>
                   <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block mb-0.5 font-sans">Experience</label>
                   <p className="text-zinc-950">{indProfile?.yearsExperience ? `${indProfile.yearsExperience} Years` : 'Not provided'}</p>
