@@ -27,17 +27,11 @@ const CreateAvailabilityPost: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [toast, setToast] = useState({ isVisible: false, message: '', type: 'success' as ToastType });
 
-  // Access check
-  if (loading) return null;
-  if (!user || userAccount?.accountType !== 'individual') {
-    return <Navigate to="/dashboard" replace />;
-  }
-
-  const indProfile = profile as IndividualProfile;
+  const indProfile = profile as IndividualProfile | null;
 
   useEffect(() => {
     const checkExisting = async () => {
-      if (!user) return;
+      if (!user || userAccount?.accountType !== 'individual') return;
       const q = query(
         collection(db, 'availabilityPosts'),
         where('individualUserId', '==', user.uid),
@@ -49,7 +43,12 @@ const CreateAvailabilityPost: React.FC = () => {
       }
     };
     checkExisting();
-  }, [user]);
+  }, [user, userAccount?.accountType]);
+
+  if (loading) return null;
+  if (!user || userAccount?.accountType !== 'individual' || !indProfile) {
+    return <Navigate to="/dashboard" replace />;
+  }
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
