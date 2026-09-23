@@ -9,10 +9,10 @@ This document records the security contract for the current stabilization branch
 Platform-admin and professional-authority privileges are backend-controlled.
 
 - Platform admin access is authorized only by the Firebase custom claim `admin: true`.
-- Professional-authority access is authorized only by the Firebase custom claim `body_admin: true` plus an active `regulatoryBodyAdmins/{uid}` record.
+- Professional-authority access is authorized only by the Firebase custom claim `authority_admin: true` plus an active `professionalAuthorityAdmins/{uid}` record.
 - Frontend code must not create privileged Firebase Auth users, assign custom claims, or elevate a normal account.
 - Hard-coded privileged email addresses and demo privileged accounts are prohibited.
-- Firestore documents such as `admins` or `regulatoryBodyAdmins` are metadata and scope records; possession of a document alone must not grant platform-admin privilege.
+- Firestore documents such as `admins` or `professionalAuthorityAdmins` are metadata and scope records; possession of a document alone must not grant platform-admin privilege.
 
 ## Member data invariants
 
@@ -77,7 +77,7 @@ Test data must be created only through controlled development tooling and must n
 
 Firebase Emulator rules tests must cover at minimum:
 
-1. normal user cannot grant themselves admin/body-admin authority
+1. normal user cannot grant themselves admin/authority-admin authority
 2. normal user cannot change `isActive` or `isVerified`
 3. professional cannot change their own verification/licence status
 4. user cannot edit another user's profile
