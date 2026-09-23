@@ -29,14 +29,18 @@ const Login: React.FC = () => {
       // Atomic activation status check immediately after sign-in
       const userDocRef = doc(db, 'users', userCredential.user.uid);
       const userDocSnap = await getDoc(userDocRef);
-      if (userDocSnap.exists()) {
-        const userData = userDocSnap.data();
-        if (userData.isActive === false) {
-          await auth.signOut();
-          setError('This account has been deactivated. Please contact support.');
-          setLoading(false);
-          return;
-        }
+
+      if (!userDocSnap.exists()) {
+        await auth.signOut();
+        setError('Your PharmaNetwork account setup is incomplete. Please contact support.');
+        return;
+      }
+
+      const userData = userDocSnap.data();
+      if (userData.isActive === false) {
+        await auth.signOut();
+        setError('This account has been deactivated. Please contact support.');
+        return;
       }
 
       navigate(from);
