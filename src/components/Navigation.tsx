@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { db } from '../lib/firebase';
-import { collection, query, where, onSnapshot, doc, getDoc } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, doc } from 'firebase/firestore';
 import { Button } from './Button';
 import { 
   Menu, 
@@ -57,46 +57,19 @@ export const Navigation: React.FC = () => {
       return;
     }
 
-    // Check if current user is admin either by email or claims
-    const checkAdmin = async () => {
+    // Privileged navigation is derived only from backend-issued custom claims.
+    const checkPrivilegedClaims = async () => {
       try {
         const idTokenResult = await user.getIdTokenResult(true);
-        if (
-          idTokenResult.claims.admin || 
-          user.email === 'liamradah10@gmail.com' || 
-          user.email === 'admin.peter@pharmagh.com'
-        ) {
-          setIsAdmin(true);
-          return;
-        }
-
-        const adminDocRef = doc(db, 'admins', user.uid);
-        const adminDocSnap = await getDoc(adminDocRef);
-        if (adminDocSnap.exists()) {
-          setIsAdmin(true);
-          return;
-        }
-
-        // Check if regulatory body admin
-        if (
-          idTokenResult.claims.body_admin || 
-          user.email === 'psu.admin@demo.pnu.ug' || 
-          user.email === 'ahpc.admin@demo.pnu.ug'
-        ) {
-          setIsBodyAdmin(true);
-          return;
-        }
-
-        const bAdminRef = doc(db, 'regulatoryBodyAdmins', user.uid);
-        const bAdminSnap = await getDoc(bAdminRef);
-        if (bAdminSnap.exists() && bAdminSnap.data().isActive !== false) {
-          setIsBodyAdmin(true);
-        }
+        setIsAdmin(idTokenResult.claims.admin === true);
+        setIsBodyAdmin(idTokenResult.claims.body_admin === true);
       } catch (err) {
-        console.error('Error verifying admin status:', err);
+        console.error('Error verifying privileged claims:', err);
+        setIsAdmin(false);
+        setIsBodyAdmin(false);
       }
     };
-    checkAdmin();
+    checkPrivilegedClaims();
 
     // Query for user messages to sum unreadCount
     const messagesQuery = query(
