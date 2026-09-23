@@ -343,12 +343,12 @@ const Register: React.FC = () => {
 
                <div className="space-y-4 mb-12">
                   {[
-                    { id: 'regulated_health_professional', label: 'I am a regulated health professional' },
-                    { id: 'pharmacy_owner', label: 'I own or manage a pharmacy or pharmaceutical business' },
-                    { id: 'manufacturing', label: 'I work in pharmaceutical manufacturing or production' },
-                    { id: 'import_distribution', label: 'I work in pharmaceutical import, distribution, or wholesale' },
-                    { id: 'medical_sales', label: 'I am a medical sales representative or marketing agent' },
-                    { id: 'regulatory_qa', label: 'I work in regulatory affairs or quality assurance' }
+                    { id: 'regulated_health_professional', label: 'Regulated health professional' },
+                    { id: 'pharmaceutical_industry', label: 'Pharmaceutical industry / manufacturing' },
+                    { id: 'regulatory_qa', label: 'Regulatory affairs / quality assurance' },
+                    { id: 'supply_chain_procurement', label: 'Health supply chain / procurement' },
+                    { id: 'sales_marketing', label: 'Medical sales / marketing' },
+                    { id: 'research_academia', label: 'Research / academia' }
                   ].map(role => (
                     <label 
                       key={role.id} 
@@ -407,8 +407,6 @@ const Register: React.FC = () => {
                   roles={individualRoles}
                   details={individualDetails}
                   setDetails={setIndividualDetails}
-                  organisations={organisations}
-                  setOrganisations={setOrganisations}
                   onBack={handleBack}
                   onSubmit={handleSubmit}
                   loading={loading}
@@ -620,9 +618,8 @@ const OrganisationForm = ({ organisations, setOrganisations, onBack, onNext, hid
    );
 };
 
-const IndividualDetailsForm = ({ roles, details, setDetails, organisations, setOrganisations, onBack, onSubmit, loading, error }: any) => {
+const IndividualDetailsForm = ({ roles, details, setDetails, onBack, onSubmit, loading, error }: any) => {
    const isProfessional = true;
-   const isOwner = roles.includes('pharmacy_owner');
 
    return (
       <div className="space-y-8">
@@ -746,15 +743,6 @@ const IndividualDetailsForm = ({ roles, details, setDetails, organisations, setO
                </div>
             </div>
 
-            {isOwner && (
-               <div className="mt-16 pt-16 border-t border-zinc-100">
-                  <OrganisationForm 
-                     organisations={organisations} 
-                     setOrganisations={setOrganisations}
-                     hideNav={true}
-                  />
-               </div>
-            )}
 
             {error && (
                <div className="mt-8 bg-red-50 text-red-600 p-4 rounded-xl text-sm flex items-center gap-2">
