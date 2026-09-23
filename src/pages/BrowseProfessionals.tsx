@@ -3,7 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
 import { collection, getDocs, query, where } from 'firebase/firestore';
 import { Button } from '../components/Button';
-import { EMPLOYMENT_TYPES, PHARMA_CADRES, UGANDA_DISTRICTS } from '../constants';
+import { EMPLOYMENT_TYPES, PROFESSIONAL_CADRES, UGANDA_DISTRICTS } from '../constants';
 import { 
   Search, 
   MapPin, 
@@ -60,6 +60,8 @@ const BrowseProfessionals: React.FC = () => {
   const [selectedExperience, setSelectedExperience] = useState('All');
   const [selectedEmploymentType, setSelectedEmploymentType] = useState('All');
   const [verificationFilter, setVerificationFilter] = useState<'all' | 'verified' | 'licensed'>('all');
+  const [visibleCount, setVisibleCount] = useState(20);
+  const [showMobileFilters, setShowMobileFilters] = useState(false);
 
   // Slide-over messaging drawer state
   const [activeChatRecipient, setActiveChatRecipient] = useState<Professional | null>(null);
@@ -101,6 +103,18 @@ const BrowseProfessionals: React.FC = () => {
     return () => window.clearTimeout(timeout);
   }, [searchQuery]);
 
+  useEffect(() => {
+    setVisibleCount(20);
+  }, [
+    debouncedSearchQuery,
+    selectedDistrict,
+    selectedCadre,
+    selectedAvailability,
+    selectedExperience,
+    selectedEmploymentType,
+    verificationFilter
+  ]);
+
   const handleClearFilters = () => {
     setSearchQuery('');
     setSelectedDistrict('All');
@@ -140,12 +154,8 @@ const BrowseProfessionals: React.FC = () => {
     }
 
     // Cadre matching
-    if (selectedCadre !== 'All') {
-      const profCadre = (prof.primaryCadre || '').toLowerCase().replace(/_/g, ' ');
-      const targetCadre = selectedCadre.toLowerCase().replace(/_/g, ' ');
-      if (!profCadre.includes(targetCadre) && !targetCadre.includes(profCadre)) {
-        return false;
-      }
+    if (selectedCadre !== 'All' && prof.primaryCadre !== selectedCadre) {
+      return false;
     }
 
     // Availability status
@@ -172,6 +182,38 @@ const BrowseProfessionals: React.FC = () => {
 
     return true;
   });
+
+  const visibleProfessionals = filteredProfessionals.slice(0, visibleCount);
+  const activeFilterCount = [
+    selectedDistrict !== 'All',
+    selectedCadre !== 'All',
+    selectedAvailability !== 'All',
+    selectedExperience !== 'All',
+    selectedEmploymentType !== 'All',
+    verificationFilter !== 'all'
+  ].filter(Boolean).length;
+
+  const cadreLabel = (cadre?: string) =>
+    PROFESSIONAL_CADRES.find(option => option.id === cadre)?.label
+      || (cadre || 'Professional').replace(/_/g, ' ');
+
+  const experienceLabel = (experience?: number | string) => {
+    const value = String(experience || '');
+    const labels: Record<string, string> = {
+      less_than_1: 'Less than 1 year',
+      '1_to_3': '1 to 3 years',
+      '3_to_5': '3 to 5 years',
+      '5_to_10': '5 to 10 years',
+      '10_plus': '10+ years'
+    };
+    return labels[value] || value;
+  };
+
+  const availabilityLabel = (status?: Professional['availabilityStatus']) => {
+    if (status === 'actively_seeking') return 'Actively Seeking';
+    if (status === 'open_to_offers') return 'Open to Offers';
+    return 'Not Available';
+  };
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 min-h-screen">
@@ -235,8 +277,8 @@ const BrowseProfessionals: React.FC = () => {
                 className="w-full bg-zinc-50 border-none rounded-xl px-4 py-3 text-sm font-semibold text-zinc-700 outline-none focus:ring-2 focus:ring-primary/20 transition-all"
               >
                 <option value="All">All Cadres</option>
-                {PHARMA_CADRES.map((cadre) => (
-                  <option key={cadre} value={cadre}>{cadre}</option>
+                {PROFESSIONAL_CADRES.map((cadre) => (
+                  <option key={cadre.id} value={cadre.id}>{cadre.label}</option>
                 ))}
               </select>
             </div>
