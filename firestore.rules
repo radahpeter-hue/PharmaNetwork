@@ -75,7 +75,58 @@ service cloud.firestore {
     match /verificationDocuments/{userId} {
       allow read: if isSignedIn()
         && (request.auth.uid == userId || isAdmin() || isBodyAdmin());
-      allow create, update: if isSignedIn() && request.auth.uid == userId;
+
+      allow create: if isSignedIn()
+        && request.auth.uid == userId
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.submissionStatus == 'pending_review'
+        && request.resource.data.keys().hasAll([
+          'userId',
+          'submittedAt',
+          'submittedForYear',
+          'submissionType',
+          'submissionStatus'
+        ])
+        && request.resource.data.keys().hasOnly([
+          'userId',
+          'registrationCertificateUrl',
+          'practisingCertificateUrl',
+          'additionalDocumentUrls',
+          'submittedAt',
+          'submittedForYear',
+          'submissionType',
+          'submissionStatus'
+        ]);
+
+      allow update: if isSignedIn() && (
+        (
+          request.auth.uid == userId
+          && resource.data.userId == request.auth.uid
+          && request.resource.data.userId == resource.data.userId
+          && request.resource.data.submissionStatus == 'pending_review'
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'registrationCertificateUrl',
+            'practisingCertificateUrl',
+            'additionalDocumentUrls',
+            'submittedAt',
+            'submittedForYear',
+            'submissionType',
+            'submissionStatus'
+          ])
+        )
+        || (
+          (isAdmin() || isBodyAdmin())
+          && request.resource.data.userId == resource.data.userId
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'reviewedAt',
+            'reviewedByUid',
+            'reviewedByBody',
+            'reviewNotes',
+            'submissionStatus'
+          ])
+        )
+      );
+
       allow delete: if isAdmin();
     }
 
