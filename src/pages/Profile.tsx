@@ -41,6 +41,9 @@ const Profile: React.FC = () => {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
+  const isAllowedVerificationFile = (file: File) =>
+    ['application/pdf', 'image/jpeg', 'image/png'].includes(file.type);
+
   if (!profile) return null;
 
   const isIndividual = 'fullName' in profile;
@@ -52,7 +55,7 @@ const Profile: React.FC = () => {
       <div className="bg-zinc-900 text-white p-6 rounded-2xl mb-12 flex flex-col md:flex-row md:items-center justify-between gap-6 overflow-hidden relative">
          <div className="relative z-10">
             <h2 className="text-xl font-bold mb-1">Your Profile</h2>
-            <p className="text-zinc-400 text-sm">Complete profiles are 5x more likely to be found.</p>
+            <p className="text-zinc-400 text-sm">Complete your profile to improve the information available to other members.</p>
          </div>
          <div className="flex items-center gap-4 relative z-10">
             <div className="flex flex-col items-end">
@@ -233,6 +236,10 @@ const Profile: React.FC = () => {
                          setErrorMsg("Please select both your registration certificate and annual practising certificate.");
                          return;
                        }
+                       if (!isAllowedVerificationFile(regFile) || !isAllowedVerificationFile(pracFile)) {
+                         setErrorMsg("Verification documents must be PDF, JPG, or PNG files.");
+                         return;
+                       }
                        if (regFile.size > 5 * 1024 * 1024 || pracFile.size > 5 * 1024 * 1024) {
                          setErrorMsg("All uploaded documents must be smaller than 5MB.");
                          return;
@@ -243,46 +250,30 @@ const Profile: React.FC = () => {
                        setSuccessMsg(null);
 
                        try {
-                         let regUrl = "https://images.unsplash.com/photo-1586075010923-2dd45e9b2d4f?w=600";
-                         let pracUrl = "https://images.unsplash.com/photo-1506784983877-45594efa4cbe?w=600";
+                         const storage = getStorage();
+                         const currentYear = new Date().getFullYear();
+                         const regRef = ref(storage, `verificationDocs/${user!.uid}/registration_certificate`);
+                         const pracRef = ref(storage, `verificationDocs/${user!.uid}/practising_certificate_${currentYear}`);
 
-                         // Attempt real storage upload, falling back to beautiful sample certificate images if storage permissions remain restricted
-                         try {
-                           const storage = getStorage();
-                           const regRef = ref(storage, `verificationDocs/${user!.uid}/registration_cert`);
-                           const pracRef = ref(storage, `verificationDocs/${user!.uid}/practising_cert`);
-                           
-                           const regUpload = await uploadBytes(regRef, regFile);
-                           regUrl = await getDownloadURL(regUpload.ref);
+                         const regUpload = await uploadBytes(regRef, regFile);
+                         const regUrl = await getDownloadURL(regUpload.ref);
+                         const pracUpload = await uploadBytes(pracRef, pracFile);
+                         const pracUrl = await getDownloadURL(pracUpload.ref);
 
-                           const pracUpload = await uploadBytes(pracRef, pracFile);
-                           pracUrl = await getDownloadURL(pracUpload.ref);
-                         } catch (storageErr) {
-                           console.warn("Storage write bypassed, falling back to testing urls:", storageErr);
-                         }
-
-                         // Create/Update Firestore verificationDocuments collection
-                         const vdRef = doc(db, 'verificationDocuments', p.id);
+                         // Verification submission is evidence only. It does not change
+                         // authoritative professional verification/licence fields.
+                         const vdRef = doc(db, 'verificationDocuments', user!.uid);
                          await setDoc(vdRef, {
                            userId: user!.uid,
                            registrationCertificateUrl: regUrl,
                            practisingCertificateUrl: pracUrl,
                            submittedAt: serverTimestamp(),
-                           submittedForYear: new Date().getFullYear()
+                           submittedForYear: currentYear,
+                           submissionType: 'initial_verification',
+                           submissionStatus: 'pending_review'
                          }, { merge: true });
 
-                         // Update Profile Credential statuses
-                         const profileRef = doc(db, 'individualProfiles', p.id);
-                         await updateDoc(profileRef, {
-                           credentialVerificationStatus: 'pending_review',
-                           credentialRejectionReason: '',
-                           updatedAt: serverTimestamp()
-                         });
-
-                         setSuccessMsg("Success! Your verification certificate request has been successfully submitted.");
-                         // Auto-reload to see layout update
-                         setTimeout(() => window.location.reload(), 1500);
-
+                         setSuccessMsg("Your verification documents have been submitted for authority review.");
                        } catch (err: any) {
                          setErrorMsg(`Submitting verification failed: ${err.message}`);
                        } finally {
@@ -296,6 +287,10 @@ const Profile: React.FC = () => {
                          setErrorMsg("Please select your new Practising Certificate file.");
                          return;
                        }
+                       if (!isAllowedVerificationFile(newPracFile)) {
+                         setErrorMsg("The practising certificate must be a PDF, JPG, or PNG file.");
+                         return;
+                       }
                        if (newPracFile.size > 5 * 1024 * 1024) {
                          setErrorMsg("Uploaded document file must be smaller than 5MB.");
                          return;
@@ -306,34 +301,24 @@ const Profile: React.FC = () => {
                        setSuccessMsg(null);
 
                        try {
-                         let newPracUrl = "https://images.unsplash.com/photo-1506784983877-45594efa4cbe?w=600";
-                         try {
-                           const storage = getStorage();
-                           const pracRef = ref(storage, `verificationDocs/${p.id}/practising_cert_renewal_${new Date().getFullYear()}`);
-                           const uploadSnap = await uploadBytes(pracRef, newPracFile);
-                           newPracUrl = await getDownloadURL(uploadSnap.ref);
-                         } catch (storageErr) {
-                           console.warn("Storage renewal write bypassed, utilizing testing url:", storageErr);
-                         }
+                         const storage = getStorage();
+                         const currentYear = new Date().getFullYear();
+                         const pracRef = ref(storage, `verificationDocs/${user!.uid}/practising_certificate_${currentYear}`);
+                         const uploadSnap = await uploadBytes(pracRef, newPracFile);
+                         const newPracUrl = await getDownloadURL(uploadSnap.ref);
 
-                         // Update verification document
-                         const vdRef = doc(db, 'verificationDocuments', p.id);
-                         await updateDoc(vdRef, {
+                         const vdRef = doc(db, 'verificationDocuments', user!.uid);
+                         await setDoc(vdRef, {
+                           userId: user!.uid,
                            practisingCertificateUrl: newPracUrl,
                            submittedAt: serverTimestamp(),
-                           submittedForYear: new Date().getFullYear()
-                         });
+                           submittedForYear: currentYear,
+                           submissionType: 'annual_renewal',
+                           submissionStatus: 'pending_review'
+                         }, { merge: true });
 
-                         // Update profile licence status
-                         const profileRef = doc(db, 'individualProfiles', p.id);
-                         await updateDoc(profileRef, {
-                           practisingLicenceStatus: 'not_renewed', // Sets back to not_renewed awaiting document review by regulator
-                           updatedAt: serverTimestamp()
-                         });
-
-                         setSuccessMsg("Your practice certificate renewal has been submitted to the board.");
+                         setSuccessMsg("Your practising certificate renewal has been submitted for authority review.");
                          setShowRenewForm(false);
-                         setTimeout(() => window.location.reload(), 1500);
                        } catch (err: any) {
                          setErrorMsg(`Renewal submission failed: ${err.message}`);
                        } finally {
