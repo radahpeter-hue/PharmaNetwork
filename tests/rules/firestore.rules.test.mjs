@@ -683,14 +683,27 @@ test('compliance officer can update compliance fields but not verification field
 
   const db = testEnv.authenticatedContext('compliance-1', { authority_admin: true }).firestore();
 
-  await assertSucceeds(updateDoc(doc(db, 'individualProfiles', 'target-professional'), {
+  // Compliance standing changes must be atomic with the account lifecycle state.
+  await assertFails(updateDoc(doc(db, 'individualProfiles', 'target-professional'), {
     practisingLicenceStatus: 'renewed_current',
     isDirectoryVisible: false
   }));
 
+  await assertSucceeds(runTransaction(db, async transaction => {
+    transaction.update(doc(db, 'users', 'target-professional'), {
+      accountStatus: 'ACTIVE',
+      isActive: true,
+      isVerified: true
+    });
+    transaction.update(doc(db, 'individualProfiles', 'target-professional'), {
+      practisingLicenceStatus: 'renewed_current',
+      isDirectoryVisible: true
+    });
+  }));
+
   await assertFails(updateDoc(doc(db, 'individualProfiles', 'target-professional'), {
     credentialVerificationStatus: 'rejected',
-    isDirectoryVisible: false
+    isDirectoryVisible: true
   }));
 });
 
