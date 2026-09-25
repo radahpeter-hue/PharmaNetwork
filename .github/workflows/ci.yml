@@ -45,8 +45,10 @@ jobs:
       - name: Build
         run: npm run build
 
-      - name: Check Batch 6 migration script syntax
-        run: node --check scripts/migrate-batch6-marketplace-data.mjs
+      - name: Check administrative script syntax
+        run: |
+          node --check scripts/migrate-batch6-marketplace-data.mjs
+          node --check scripts/manage-privileged-access.mjs
 
       - name: Firebase authorization rules tests
         run: npx firebase emulators:exec --project demo-pharmanetwork --only firestore,storage "node --test --test-concurrency=1 tests/rules/*.test.mjs"
