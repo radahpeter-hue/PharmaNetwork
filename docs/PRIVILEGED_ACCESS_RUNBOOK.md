@@ -118,3 +118,38 @@ Do not:
 - provision authority staff outside their authority's governed cadres
 - grant the same account both platform-admin and authority-staff roles
 - use this script against production until the production administration procedure has been separately approved
+
+
+## Authority staff role and scope updates
+
+Existing authority staff role/cadre scope changes use the same trusted script:
+
+```bash
+node scripts/manage-privileged-access.mjs \
+  --action=update \
+  --kind=authority-staff \
+  --uid=<AUTH_UID> \
+  --authority-id=<AUTHORITY_DOC_ID> \
+  --role=compliance_officer \
+  --scoped-cadres=pharmacist \
+  --actor=<OPERATOR_IDENTIFIER>
+```
+
+The update refuses cross-authority reassignment, inactive staff records, missing authority claims and cadres outside the authority's governed scope.
+
+## Professional authority lifecycle
+
+Authority entities are managed only through trusted Admin SDK execution:
+
+```bash
+node scripts/manage-professional-authority.mjs --action=create --authority-id=<ID> --name="Authority Name" --governed-cadres=pharmacist --actor=<OPERATOR>
+node scripts/manage-professional-authority.mjs --action=update --authority-id=<ID> --governed-cadres=pharmacist,pharmacy_technician --actor=<OPERATOR>
+node scripts/manage-professional-authority.mjs --action=disable --authority-id=<ID> --actor=<OPERATOR>
+node scripts/manage-professional-authority.mjs --action=enable --authority-id=<ID> --actor=<OPERATOR>
+```
+
+Firestore clients, including platform-admin clients, cannot create or mutate authority entities or authority-staff privilege metadata. Firebase Admin SDK tooling bypasses those client rules and records the operation in `privilegeAuditLogs`.
+
+A governed-cadre reduction is refused when an active authority staff record would retain an out-of-scope cadre. Reconcile staff scope first, then retry the authority update.
+
+Disabling an authority immediately makes its staff fail Firestore/Storage authority checks because those checks require the parent authority to remain active. Staff records and claims are retained for auditability; permanently departing staff should also be explicitly revoked.

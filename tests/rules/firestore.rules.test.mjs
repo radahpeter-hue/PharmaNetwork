@@ -565,13 +565,44 @@ test('privilege audit logs are immutable from clients and readable only by platf
   }));
 });
 
-test('platform admin can manage authority records', async () => {
-  const db = testEnv.authenticatedContext('platform-admin', { admin: true }).firestore();
+test('authority lifecycle and staff privilege metadata are not client-writable', async () => {
+  await seed(async db => {
+    await setDoc(doc(db, 'professionalAuthorities', 'authority-2'), {
+      id: 'authority-2',
+      governedCadres: ['pharmacist'],
+      isActive: true
+    });
+    await setDoc(doc(db, 'professionalAuthorityAdmins', 'authority-user-2'), {
+      uid: 'authority-user-2',
+      authorityId: 'authority-2',
+      scopedCadres: ['pharmacist'],
+      role: 'authority_super_admin',
+      isActive: true
+    });
+  });
 
-  await assertSucceeds(setDoc(doc(db, 'professionalAuthorities', 'authority-2'), {
-    id: 'authority-2',
-    governedCadres: ['pharmacist'],
+  const adminDb = testEnv.authenticatedContext('platform-admin', { admin: true }).firestore();
+  const authorityDb = testEnv.authenticatedContext('authority-user-2', { authority_admin: true }).firestore();
+
+  await assertSucceeds(getDoc(doc(adminDb, 'professionalAuthorities', 'authority-2')));
+  await assertSucceeds(getDoc(doc(authorityDb, 'professionalAuthorities', 'authority-2')));
+
+  await assertFails(setDoc(doc(adminDb, 'professionalAuthorities', 'authority-3'), {
+    id: 'authority-3',
+    governedCadres: ['nurse'],
     isActive: true
+  }));
+
+  await assertFails(updateDoc(doc(adminDb, 'professionalAuthorities', 'authority-2'), {
+    isActive: false
+  }));
+
+  await assertFails(updateDoc(doc(adminDb, 'professionalAuthorityAdmins', 'authority-user-2'), {
+    role: 'verification_officer'
+  }));
+
+  await assertFails(updateDoc(doc(authorityDb, 'professionalAuthorityAdmins', 'authority-user-2'), {
+    scopedCadres: ['pharmacist', 'nurse']
   }));
 });
 

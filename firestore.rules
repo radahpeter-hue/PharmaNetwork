@@ -370,7 +370,8 @@ service cloud.firestore {
           && authorityId
             == get(/databases/$(database)/documents/professionalAuthorityAdmins/$(request.auth.uid)).data.authorityId
         );
-      allow write: if isAdmin();
+      // Authority lifecycle changes are trusted-backend only.
+      allow write: if false;
     }
 
     match /professionalAuthorityAdmins/{adminUid} {
@@ -380,7 +381,8 @@ service cloud.firestore {
           && resource.data.authorityId
             == get(/databases/$(database)/documents/professionalAuthorityAdmins/$(request.auth.uid)).data.authorityId
         );
-      allow write: if isAdmin();
+      // Staff role/scope changes are trusted-backend only.
+      allow write: if false;
     }
 
     match /verificationDocuments/{userId} {
