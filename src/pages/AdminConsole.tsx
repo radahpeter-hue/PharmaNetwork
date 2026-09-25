@@ -14,7 +14,8 @@ import {
   startAfter, 
   where,
   Timestamp,
-  GeoPoint
+  GeoPoint,
+  writeBatch
 } from 'firebase/firestore';
 import { 
   Shield, 
@@ -286,18 +287,36 @@ export const AdminConsole: React.FC = () => {
     }
   };
 
-  const handleToggleUserStatus = async (userElement: any) => {
-    const nextStatus = !userElement.isActive;
+  const handleDeactivateUser = async (userElement: any) => {
     const pathTrace = `users/${userElement.id}`;
-    
+
     try {
-      await updateDoc(doc(db, 'users', userElement.id), {
-        isActive: nextStatus,
+      const batch = writeBatch(db);
+
+      batch.update(doc(db, 'users', userElement.id), {
+        accountStatus: 'DEACTIVATED_BY_PLATFORM',
+        isActive: false,
         updatedAt: Timestamp.now()
       });
 
-      // Update state
-      setAllUsers(prev => prev.map(u => u.id === userElement.id ? { ...u, isActive: nextStatus } : u));
+      // A platform-deactivated professional must disappear from the directory
+      // immediately. Reactivation is intentionally not a generic UI toggle:
+      // professional standing belongs to the responsible authority and must be
+      // re-established through a controlled review workflow.
+      if (userElement.accountType === 'individual') {
+        batch.update(doc(db, 'individualProfiles', userElement.id), {
+          isDirectoryVisible: false,
+          updatedAt: Timestamp.now()
+        });
+      }
+
+      await batch.commit();
+
+      setAllUsers(prev => prev.map(u =>
+        u.id === userElement.id
+          ? { ...u, accountStatus: 'DEACTIVATED_BY_PLATFORM', isActive: false }
+          : u
+      ));
       setConfirmDeactivateUser(null);
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, pathTrace);
@@ -389,18 +408,28 @@ export const AdminConsole: React.FC = () => {
     const userId = flag.contentOwnerId;
     
     try {
-      // Deactivate User
-      await updateDoc(doc(db, 'users', userId), {
+      const batch = writeBatch(db);
+
+      batch.update(doc(db, 'users', userId), {
+        accountStatus: 'DEACTIVATED_BY_PLATFORM',
         isActive: false,
         updatedAt: Timestamp.now()
       });
 
-      // Mark content flag as actioned
-      await updateDoc(doc(db, 'contentFlags', flag.id), {
+      if (flag.contentType === 'profile') {
+        batch.update(doc(db, 'individualProfiles', userId), {
+          isDirectoryVisible: false,
+          updatedAt: Timestamp.now()
+        });
+      }
+
+      batch.update(doc(db, 'contentFlags', flag.id), {
         status: 'actioned',
         reviewedAt: Timestamp.now(),
         reviewedBy: currentUser?.uid || 'admin'
       });
+
+      await batch.commit();
 
       setContentFlags(prev => prev.map(f => f.id === flag.id ? { ...f, status: 'actioned', reviewedAt: Timestamp.now() } : f));
       // Reload lookup profiles reference
@@ -858,12 +887,9 @@ export const AdminConsole: React.FC = () => {
                                   Deactivate
                                 </button>
                               ) : (
-                                <button
-                                  onClick={() => handleToggleUserStatus(elem)}
-                                  className="bg-green-50 hover:bg-green-100 text-green-650 text-[10px] font-black px-3 py-1.5 rounded-lg uppercase tracking-wide cursor-pointer"
-                                >
-                                  Reactivate
-                                </button>
+                                <span className="bg-zinc-100 text-zinc-500 text-[10px] font-black px-3 py-1.5 rounded-lg uppercase tracking-wide">
+                                  {elem.accountStatus === 'DEACTIVATED_BY_PLATFORM' ? 'Platform deactivated' : 'Inactive'}
+                                </span>
                               )}
                             </div>
                           </td>
@@ -1346,7 +1372,7 @@ export const AdminConsole: React.FC = () => {
         </div>
       </div>
 
-      {/* Confirmation Modal for user deactivation / reactivation */}
+      {/* Confirmation modal for platform-level deactivation */}
       {confirmDeactivateUser && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[99] flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl border border-zinc-150 p-8 max-w-sm w-full shadow-2xl animate-fade-in">
@@ -1355,7 +1381,7 @@ export const AdminConsole: React.FC = () => {
             </div>
             <h3 className="text-lg font-black text-zinc-900 tracking-tight">Deactivate this account?</h3>
             <p className="text-zinc-500 text-xs mt-2 font-medium leading-relaxed">
-              The user with name "{confirmDeactivateUser.displayName}" will be signed out and cannot log in until reactivated. Are you absolutely sure?
+              Member-network access for "{confirmDeactivateUser.displayName}" will be disabled at platform level. Professional directory visibility will also be removed. Restoration requires a controlled review rather than a generic reactivation toggle. Continue?
             </p>
             <div className="flex gap-3 mt-8">
               <button
@@ -1367,7 +1393,7 @@ export const AdminConsole: React.FC = () => {
               </button>
               <button
                 type="button"
-                onClick={() => handleToggleUserStatus(confirmDeactivateUser)}
+                onClick={() => handleDeactivateUser(confirmDeactivateUser)}
                 className="flex-grow bg-red-600 hover:bg-red-750 text-white text-xs font-black py-3 rounded-2xl uppercase tracking-wider transition-all cursor-pointer select-none"
               >
                 Yes, deactivate
