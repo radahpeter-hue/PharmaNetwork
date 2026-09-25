@@ -19,11 +19,18 @@ service cloud.firestore {
     }
 
     function isAuthorityAdmin() {
+      let adminPath = /databases/$(database)/documents/professionalAuthorityAdmins/$(request.auth.uid);
       return isSignedIn()
         && ('authority_admin' in request.auth.token)
         && request.auth.token.authority_admin == true
-        && exists(/databases/$(database)/documents/professionalAuthorityAdmins/$(request.auth.uid))
-        && get(/databases/$(database)/documents/professionalAuthorityAdmins/$(request.auth.uid)).data.isActive == true;
+        && exists(adminPath)
+        && get(adminPath).data.isActive == true
+        && exists(
+          /databases/$(database)/documents/professionalAuthorities/$(get(adminPath).data.authorityId)
+        )
+        && get(
+          /databases/$(database)/documents/professionalAuthorities/$(get(adminPath).data.authorityId)
+        ).data.isActive == true;
     }
 
     function authorityAdminHasCadre(cadre) {
