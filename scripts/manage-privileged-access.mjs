@@ -24,8 +24,8 @@ const kind = required('kind');
 const uid = required('uid');
 const actor = required('actor');
 
-if (!['grant', 'revoke'].includes(action)) {
-  throw new Error('--action must be grant or revoke');
+if (!['grant', 'revoke', 'update'].includes(action)) {
+  throw new Error('--action must be grant, revoke or update');
 }
 if (!['platform-admin', 'authority-staff'].includes(kind)) {
   throw new Error('--kind must be platform-admin or authority-staff');
@@ -83,6 +83,10 @@ const userRecord = await auth.getUser(uid);
 const currentClaims = { ...(userRecord.customClaims || {}) };
 
 if (kind === 'platform-admin') {
+  if (action === 'update') {
+    throw new Error('--action=update is supported only for authority-staff.');
+  }
+
   if (action === 'grant') {
     if (currentClaims.authority_admin === true) {
       throw new Error('Refusing to combine platform-admin and authority-staff privilege on the same account.');
@@ -128,7 +132,7 @@ if (kind === 'platform-admin') {
 } else {
   const authorityId = required('authority-id');
 
-  if (action === 'grant') {
+  if (action === 'grant' || action === 'update') {
     if (currentClaims.admin === true) {
       throw new Error('Refusing to combine authority-staff and platform-admin privilege on the same account.');
     }
@@ -166,13 +170,30 @@ if (kind === 'platform-admin') {
       );
     }
 
-    const fullName = String(args['full-name'] || userRecord.displayName || '').trim();
-    const email = String(args.email || userRecord.email || '').trim();
+    const adminRef = db.collection('professionalAuthorityAdmins').doc(uid);
+    const existingAdmin = await adminRef.get();
 
-    if (!fullName) throw new Error('Provide --full-name because the Auth account has no display name.');
-    if (!email) throw new Error('Provide --email because the Auth account has no email.');
+    if (action === 'update') {
+      if (!existingAdmin.exists || existingAdmin.data()?.isActive !== true) {
+        throw new Error('Authority staff update requires an existing active authority-staff record.');
+      }
+      if (existingAdmin.data()?.authorityId !== authorityId) {
+        throw new Error(
+          `UID ${uid} belongs to authority ${existingAdmin.data()?.authorityId}, not ${authorityId}.`
+        );
+      }
+      if (currentClaims.authority_admin !== true) {
+        throw new Error('Authority staff update requires the authority_admin custom claim to already be present.');
+      }
+    }
 
-    await db.collection('professionalAuthorityAdmins').doc(uid).set({
+    const fullName = String(args['full-name'] || existingAdmin.data()?.fullName || userRecord.displayName || '').trim();
+    const email = String(args.email || existingAdmin.data()?.email || userRecord.email || '').trim();
+
+    if (!fullName) throw new Error('Provide --full-name because no existing/display name is available.');
+    if (!email) throw new Error('Provide --email because no existing/Auth email is available.');
+
+    await adminRef.set({
       uid,
       fullName,
       email,
@@ -181,24 +202,30 @@ if (kind === 'platform-admin') {
       scopedCadres,
       role,
       isActive: true,
-      addedAt: FieldValue.serverTimestamp(),
+      ...(action === 'grant' && !existingAdmin.exists ? { addedAt: FieldValue.serverTimestamp() } : {}),
       updatedAt: FieldValue.serverTimestamp()
     }, { merge: true });
 
-    await auth.setCustomUserClaims(uid, {
-      ...currentClaims,
-      authority_admin: true
-    });
+    if (action === 'grant') {
+      await auth.setCustomUserClaims(uid, {
+        ...currentClaims,
+        authority_admin: true
+      });
+    }
 
     await audit({
-      action: 'GRANT_AUTHORITY_STAFF',
+      action: action === 'grant' ? 'GRANT_AUTHORITY_STAFF' : 'UPDATE_AUTHORITY_STAFF_SCOPE',
       privilege: 'authority_admin',
       authorityId,
       authorityRole: role,
       scopedCadres
     });
 
-    console.log(`Granted authority-staff privilege to UID ${uid} for ${authorityId} as ${role}.`);
+    console.log(
+      action === 'grant'
+        ? `Granted authority-staff privilege to UID ${uid} for ${authorityId} as ${role}.`
+        : `Updated authority-staff role/scope for UID ${uid} in ${authorityId}.`
+    );
   } else {
     const adminRef = db.collection('professionalAuthorityAdmins').doc(uid);
     const adminSnap = await adminRef.get();
