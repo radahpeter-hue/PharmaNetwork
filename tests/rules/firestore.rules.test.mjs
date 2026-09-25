@@ -121,6 +121,28 @@ test('pending professional cannot browse another professional while active membe
   await assertSucceeds(getDoc(doc(activeDb, 'individualProfiles', 'target-user')));
 });
 
+test('isActive flag alone does not grant member-network access when accountStatus is not ACTIVE', async () => {
+  await seed(async db => {
+    await setDoc(doc(db, 'users', 'status-drift-user'), {
+      id: 'status-drift-user',
+      accountType: 'individual',
+      accountClass: 'professional',
+      accountStatus: 'SUSPENDED_BY_AUTHORITY',
+      isActive: true,
+      isVerified: true
+    });
+    await setDoc(doc(db, 'individualProfiles', 'visible-target'), {
+      fullName: 'Visible Target',
+      primaryCadre: 'pharmacist',
+      profileCompleteness: 90,
+      isDirectoryVisible: true
+    });
+  });
+
+  const driftDb = testEnv.authenticatedContext('status-drift-user').firestore();
+  await assertFails(getDoc(doc(driftDb, 'individualProfiles', 'visible-target')));
+});
+
 test('active member cannot read a hidden professional profile', async () => {
   await seed(async db => {
     await setDoc(doc(db, 'users', 'active-user'), {
