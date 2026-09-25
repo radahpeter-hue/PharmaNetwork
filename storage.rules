@@ -15,21 +15,32 @@ service firebase.storage {
     function isActiveMember() {
       return isSignedIn()
         && firestore.exists(/databases/(default)/documents/users/$(request.auth.uid))
-        && firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.isActive == true;
+        && firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.isActive == true
+        && firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.accountStatus == 'ACTIVE';
     }
 
     function isVisibleProfessional(userId) {
-      return firestore.exists(/databases/(default)/documents/individualProfiles/$(userId))
+      return firestore.exists(/databases/(default)/documents/users/$(userId))
+        && firestore.get(/databases/(default)/documents/users/$(userId)).data.isActive == true
+        && firestore.get(/databases/(default)/documents/users/$(userId)).data.accountStatus == 'ACTIVE'
+        && firestore.exists(/databases/(default)/documents/individualProfiles/$(userId))
         && firestore.get(/databases/(default)/documents/individualProfiles/$(userId)).data.isDirectoryVisible == true
         && firestore.get(/databases/(default)/documents/individualProfiles/$(userId)).data.profileCompleteness >= 60;
     }
 
     function isAuthorityAdmin() {
+      let adminPath = /databases/(default)/documents/professionalAuthorityAdmins/$(request.auth.uid);
       return isSignedIn()
         && ('authority_admin' in request.auth.token)
         && request.auth.token.authority_admin == true
-        && firestore.exists(/databases/(default)/documents/professionalAuthorityAdmins/$(request.auth.uid))
-        && firestore.get(/databases/(default)/documents/professionalAuthorityAdmins/$(request.auth.uid)).data.isActive == true;
+        && firestore.exists(adminPath)
+        && firestore.get(adminPath).data.isActive == true
+        && firestore.exists(
+          /databases/(default)/documents/professionalAuthorities/$(firestore.get(adminPath).data.authorityId)
+        )
+        && firestore.get(
+          /databases/(default)/documents/professionalAuthorities/$(firestore.get(adminPath).data.authorityId)
+        ).data.isActive == true;
     }
 
     function authorityCanAccessProfessional(userId) {
