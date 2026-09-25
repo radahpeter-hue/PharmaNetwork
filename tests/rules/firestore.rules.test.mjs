@@ -194,6 +194,104 @@ test('professional cannot modify authoritative verification fields', async () =>
   }));
 });
 
+test('authority privilege is disabled when the parent professional authority is inactive', async () => {
+  await seed(async db => {
+    await setDoc(doc(db, 'professionalAuthorities', 'disabled-authority'), {
+      id: 'disabled-authority',
+      governedCadres: ['pharmacist'],
+      isActive: false
+    });
+    await setDoc(doc(db, 'professionalAuthorityAdmins', 'disabled-authority-user'), {
+      uid: 'disabled-authority-user',
+      authorityId: 'disabled-authority',
+      scopedCadres: ['pharmacist'],
+      role: 'verification_officer',
+      isActive: true
+    });
+    await setDoc(doc(db, 'individualProfiles', 'target-disabled-authority'), {
+      fullName: 'Target Professional',
+      primaryCadre: 'pharmacist',
+      registrationNumber: 'REG-DISABLED',
+      credentialVerificationStatus: 'unverified',
+      profileCompleteness: 80,
+      isDirectoryVisible: false
+    });
+  });
+
+  const db = testEnv.authenticatedContext(
+    'disabled-authority-user',
+    { authority_admin: true }
+  ).firestore();
+
+  await assertFails(getDoc(doc(db, 'individualProfiles', 'target-disabled-authority')));
+  await assertFails(updateDoc(doc(db, 'individualProfiles', 'target-disabled-authority'), {
+    credentialVerificationStatus: 'verified',
+    isDirectoryVisible: false
+  }));
+});
+
+test('authority staff cannot cross authority boundaries and reviewer cannot mutate standing', async () => {
+  await seed(async db => {
+    await setDoc(doc(db, 'professionalAuthorities', 'authority-a'), {
+      id: 'authority-a',
+      governedCadres: ['pharmacist'],
+      isActive: true
+    });
+    await setDoc(doc(db, 'professionalAuthorities', 'authority-b'), {
+      id: 'authority-b',
+      governedCadres: ['nurse'],
+      isActive: true
+    });
+    await setDoc(doc(db, 'professionalAuthorityAdmins', 'reviewer-a'), {
+      uid: 'reviewer-a',
+      authorityId: 'authority-a',
+      scopedCadres: ['pharmacist'],
+      role: 'reviewer',
+      isActive: true
+    });
+    await setDoc(doc(db, 'professionalAuthorityAdmins', 'staff-b'), {
+      uid: 'staff-b',
+      authorityId: 'authority-b',
+      scopedCadres: ['nurse'],
+      role: 'verification_officer',
+      isActive: true
+    });
+    await setDoc(doc(db, 'individualProfiles', 'pharmacist-target'), {
+      fullName: 'Pharmacist Target',
+      primaryCadre: 'pharmacist',
+      registrationNumber: 'REG-A',
+      credentialVerificationStatus: 'unverified',
+      practisingLicenceStatus: 'not_renewed',
+      profileCompleteness: 80,
+      isDirectoryVisible: false
+    });
+    await setDoc(doc(db, 'individualProfiles', 'nurse-target'), {
+      fullName: 'Nurse Target',
+      primaryCadre: 'nurse',
+      registrationNumber: 'REG-B',
+      credentialVerificationStatus: 'unverified',
+      profileCompleteness: 80,
+      isDirectoryVisible: false
+    });
+  });
+
+  const reviewerDb = testEnv.authenticatedContext('reviewer-a', { authority_admin: true }).firestore();
+
+  await assertSucceeds(getDoc(doc(reviewerDb, 'individualProfiles', 'pharmacist-target')));
+  await assertFails(getDoc(doc(reviewerDb, 'individualProfiles', 'nurse-target')));
+  await assertFails(getDoc(doc(reviewerDb, 'professionalAuthorityAdmins', 'staff-b')));
+
+  await assertFails(updateDoc(doc(reviewerDb, 'individualProfiles', 'pharmacist-target'), {
+    credentialVerificationStatus: 'verified',
+    isDirectoryVisible: false
+  }));
+
+  await assertFails(updateDoc(doc(reviewerDb, 'individualProfiles', 'pharmacist-target'), {
+    practisingLicenceStatus: 'renewed_current',
+    isDirectoryVisible: false
+  }));
+});
+
 test('verification officer can update verification fields but not compliance fields', async () => {
   await seed(async db => {
     await setDoc(doc(db, 'professionalAuthorities', 'authority-1'), {
