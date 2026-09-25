@@ -326,6 +326,31 @@ test('normal member cannot write platform statistics', async () => {
   }));
 });
 
+test('privilege audit logs are immutable from clients and readable only by platform admins', async () => {
+  await seed(async db => {
+    await setDoc(doc(db, 'privilegeAuditLogs', 'audit-1'), {
+      action: 'GRANT_PLATFORM_ADMIN',
+      actor: 'bootstrap-operator',
+      targetUid: 'target-admin',
+      privilege: 'admin'
+    });
+  });
+
+  const memberDb = testEnv.authenticatedContext('normal-member').firestore();
+  const adminDb = testEnv.authenticatedContext('platform-admin', { admin: true }).firestore();
+
+  await assertFails(getDoc(doc(memberDb, 'privilegeAuditLogs', 'audit-1')));
+  await assertSucceeds(getDoc(doc(adminDb, 'privilegeAuditLogs', 'audit-1')));
+
+  await assertFails(setDoc(doc(adminDb, 'privilegeAuditLogs', 'client-created'), {
+    action: 'CLIENT_WRITE_SHOULD_FAIL'
+  }));
+
+  await assertFails(updateDoc(doc(adminDb, 'privilegeAuditLogs', 'audit-1'), {
+    action: 'MUTATED'
+  }));
+});
+
 test('platform admin can manage authority records', async () => {
   const db = testEnv.authenticatedContext('platform-admin', { admin: true }).firestore();
 
