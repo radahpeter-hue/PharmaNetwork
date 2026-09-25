@@ -66,7 +66,40 @@ service cloud.firestore {
         && authorityRoleIsOneOf(['authority_super_admin', 'compliance_officer']);
     }
 
-    function isAuthorityVerificationProfileUpdate(cadre) {
+    function verificationTransitionIsConsistent(userId) {
+      let accountBefore = get(/databases/$(database)/documents/users/$(userId)).data;
+      let accountAfter = getAfter(/databases/$(database)/documents/users/$(userId)).data;
+      let verificationAfter = getAfter(/databases/$(database)/documents/verificationDocuments/$(userId)).data;
+
+      return accountBefore.accountStatus == 'PENDING_AUTHORITY_VERIFICATION'
+        && accountBefore.isActive == false
+        && accountBefore.isVerified == false
+        && (
+          (
+            request.resource.data.credentialVerificationStatus == 'verified'
+            && accountAfter.accountStatus == 'INACTIVE_ANNUAL_COMPLIANCE'
+            && accountAfter.isActive == false
+            && accountAfter.isVerified == true
+            && verificationAfter.submissionStatus == 'approved'
+          )
+          || (
+            request.resource.data.credentialVerificationStatus == 'rejected'
+            && accountAfter.accountStatus == 'REJECTED'
+            && accountAfter.isActive == false
+            && accountAfter.isVerified == false
+            && verificationAfter.submissionStatus == 'rejected'
+          )
+          || (
+            request.resource.data.credentialVerificationStatus == 'unverified'
+            && accountAfter.accountStatus == 'MORE_INFORMATION_REQUIRED'
+            && accountAfter.isActive == false
+            && accountAfter.isVerified == false
+            && verificationAfter.submissionStatus == 'more_information_required'
+          )
+        );
+    }
+
+    function isAuthorityVerificationProfileUpdate(userId, cadre) {
       return authorityAdminHasCadre(cadre)
         && authorityRoleIsOneOf(['authority_super_admin', 'verification_officer'])
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
@@ -78,13 +111,23 @@ service cloud.firestore {
           'isDirectoryVisible',
           'updatedAt'
         ])
-        && request.resource.data.isDirectoryVisible == false;
+        && request.resource.data.isDirectoryVisible == false
+        && verificationTransitionIsConsistent(userId);
     }
 
     function isAuthorityComplianceProfileUpdate(userId, cadre) {
+      let accountBefore = get(/databases/$(database)/documents/users/$(userId)).data;
       let accountAfter = getAfter(/databases/$(database)/documents/users/$(userId)).data;
+
       return authorityAdminHasCadre(cadre)
         && authorityRoleIsOneOf(['authority_super_admin', 'compliance_officer'])
+        && resource.data.credentialVerificationStatus == 'verified'
+        && accountBefore.isVerified == true
+        && accountBefore.accountStatus in [
+          'INACTIVE_ANNUAL_COMPLIANCE',
+          'ACTIVE',
+          'SUSPENDED_BY_AUTHORITY'
+        ]
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
           'practisingLicenceStatus',
           'practisingLicenceYear',
@@ -94,6 +137,26 @@ service cloud.firestore {
           'isDirectoryVisible',
           'updatedAt'
         ])
+        && (
+          (
+            request.resource.data.practisingLicenceStatus == 'renewed_current'
+            && accountAfter.accountStatus == 'ACTIVE'
+            && accountAfter.isActive == true
+            && accountAfter.isVerified == true
+          )
+          || (
+            request.resource.data.practisingLicenceStatus == 'suspended'
+            && accountAfter.accountStatus == 'SUSPENDED_BY_AUTHORITY'
+            && accountAfter.isActive == false
+            && accountAfter.isVerified == true
+          )
+          || (
+            request.resource.data.practisingLicenceStatus in ['not_renewed', 'lapsed']
+            && accountAfter.accountStatus == 'INACTIVE_ANNUAL_COMPLIANCE'
+            && accountAfter.isActive == false
+            && accountAfter.isVerified == true
+          )
+        )
         && request.resource.data.isDirectoryVisible
           == (
             accountAfter.isActive == true
@@ -104,6 +167,9 @@ service cloud.firestore {
 
     function isAuthorityVerificationAccountUpdate(userId) {
       return canVerifyProfessional(userId)
+        && resource.data.accountStatus == 'PENDING_AUTHORITY_VERIFICATION'
+        && resource.data.isActive == false
+        && resource.data.isVerified == false
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
           'accountStatus',
           'isActive',
@@ -132,6 +198,11 @@ service cloud.firestore {
     function isAuthorityComplianceAccountUpdate(userId) {
       return canManageComplianceProfessional(userId)
         && resource.data.isVerified == true
+        && resource.data.accountStatus in [
+          'INACTIVE_ANNUAL_COMPLIANCE',
+          'ACTIVE',
+          'SUSPENDED_BY_AUTHORITY'
+        ]
         && request.resource.data.isVerified == true
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
           'accountStatus',
@@ -436,7 +507,8 @@ service cloud.firestore {
           ])
         )
         || (
-          (isAdmin() || canVerifyProfessional(userId))
+          canVerifyProfessional(userId)
+          && resource.data.submissionStatus == 'pending_review'
           && request.resource.data.userId == resource.data.userId
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
             'reviewedAt',
@@ -483,7 +555,7 @@ service cloud.firestore {
             )
         )
         || isAdmin()
-        || isAuthorityVerificationProfileUpdate(resource.data.primaryCadre)
+        || isAuthorityVerificationProfileUpdate(userId, resource.data.primaryCadre)
         || isAuthorityComplianceProfileUpdate(userId, resource.data.primaryCadre)
       );
       allow delete: if isAdmin();

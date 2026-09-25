@@ -13,6 +13,7 @@ import {
   increment,
   query,
   runTransaction,
+  writeBatch,
   setDoc,
   Timestamp,
   updateDoc,
@@ -31,6 +32,14 @@ const seed = async (callback) => {
 
 const quotaSlotRef = (db, ownerUid, type, slotKey) =>
   doc(db, 'postingQuotaSlots', ownerUid, 'slots', `${type}_${slotKey}`);
+
+const writeBatchDecision = async (db, { userId, profile, account, verification }) => {
+  const batch = writeBatch(db);
+  batch.update(doc(db, 'individualProfiles', userId), profile);
+  batch.update(doc(db, 'users', userId), account);
+  batch.update(doc(db, 'verificationDocuments', userId), verification);
+  await batch.commit();
+};
 
 const setQuotaSlot = (transaction, db, { ownerUid, type, slotKey, postingId, expiresAt }) => {
   transaction.set(quotaSlotRef(db, ownerUid, type, slotKey), {
@@ -292,6 +301,207 @@ test('authority staff cannot cross authority boundaries and reviewer cannot muta
   }));
 });
 
+test('verification decision must be an atomic transition from pending authority verification', async () => {
+  await seed(async db => {
+    await setDoc(doc(db, 'professionalAuthorities', 'authority-transition'), {
+      id: 'authority-transition',
+      governedCadres: ['pharmacist'],
+      isActive: true
+    });
+    await setDoc(doc(db, 'professionalAuthorityAdmins', 'verifier-transition'), {
+      uid: 'verifier-transition',
+      authorityId: 'authority-transition',
+      scopedCadres: ['pharmacist'],
+      role: 'verification_officer',
+      isActive: true
+    });
+    await setDoc(doc(db, 'users', 'pending-transition'), {
+      id: 'pending-transition',
+      accountType: 'individual',
+      accountClass: 'professional',
+      accountStatus: 'PENDING_AUTHORITY_VERIFICATION',
+      isActive: false,
+      isVerified: false
+    });
+    await setDoc(doc(db, 'individualProfiles', 'pending-transition'), {
+      fullName: 'Pending Transition',
+      primaryCadre: 'pharmacist',
+      registrationNumber: 'REG-TRANSITION',
+      credentialVerificationStatus: 'unverified',
+      profileCompleteness: 85,
+      isDirectoryVisible: false
+    });
+    await setDoc(doc(db, 'verificationDocuments', 'pending-transition'), {
+      userId: 'pending-transition',
+      submissionStatus: 'pending_review',
+      submittedAt: Timestamp.now(),
+      submittedForYear: 2026,
+      submissionType: 'initial'
+    });
+  });
+
+  const db = testEnv.authenticatedContext('verifier-transition', { authority_admin: true }).firestore();
+
+  await assertFails(updateDoc(doc(db, 'individualProfiles', 'pending-transition'), {
+    credentialVerificationStatus: 'verified',
+    isDirectoryVisible: false
+  }));
+
+  await assertSucceeds(writeBatchDecision(db, {
+    userId: 'pending-transition',
+    profile: {
+      credentialVerificationStatus: 'verified',
+      credentialVerifiedAt: Timestamp.now(),
+      credentialVerifiedByBody: 'Authority Transition',
+      credentialVerifiedByUid: 'verifier-transition',
+      credentialRejectionReason: '',
+      isDirectoryVisible: false
+    },
+    account: {
+      accountStatus: 'INACTIVE_ANNUAL_COMPLIANCE',
+      isActive: false,
+      isVerified: true
+    },
+    verification: {
+      submissionStatus: 'approved',
+      reviewedAt: Timestamp.now(),
+      reviewedByUid: 'verifier-transition',
+      reviewedByBody: 'authority-transition',
+      reviewNotes: 'Approved'
+    }
+  }));
+});
+
+test('verification officer cannot re-decide an already verified or rejected professional', async () => {
+  await seed(async db => {
+    await setDoc(doc(db, 'professionalAuthorities', 'authority-redecision'), {
+      id: 'authority-redecision',
+      governedCadres: ['pharmacist'],
+      isActive: true
+    });
+    await setDoc(doc(db, 'professionalAuthorityAdmins', 'verifier-redecision'), {
+      uid: 'verifier-redecision',
+      authorityId: 'authority-redecision',
+      scopedCadres: ['pharmacist'],
+      role: 'verification_officer',
+      isActive: true
+    });
+
+    for (const [uid, status, verified, credentialStatus, submissionStatus] of [
+      ['already-verified', 'INACTIVE_ANNUAL_COMPLIANCE', true, 'verified', 'approved'],
+      ['already-rejected', 'REJECTED', false, 'rejected', 'rejected']
+    ]) {
+      await setDoc(doc(db, 'users', uid), {
+        id: uid,
+        accountType: 'individual',
+        accountClass: 'professional',
+        accountStatus: status,
+        isActive: false,
+        isVerified: verified
+      });
+      await setDoc(doc(db, 'individualProfiles', uid), {
+        fullName: uid,
+        primaryCadre: 'pharmacist',
+        registrationNumber: uid,
+        credentialVerificationStatus: credentialStatus,
+        profileCompleteness: 85,
+        isDirectoryVisible: false
+      });
+      await setDoc(doc(db, 'verificationDocuments', uid), {
+        userId: uid,
+        submissionStatus,
+        submittedAt: Timestamp.now(),
+        submittedForYear: 2026,
+        submissionType: 'initial'
+      });
+    }
+  });
+
+  const db = testEnv.authenticatedContext('verifier-redecision', { authority_admin: true }).firestore();
+
+  await assertFails(updateDoc(doc(db, 'users', 'already-verified'), {
+    accountStatus: 'REJECTED',
+    isActive: false,
+    isVerified: false
+  }));
+  await assertFails(updateDoc(doc(db, 'verificationDocuments', 'already-rejected'), {
+    submissionStatus: 'approved',
+    reviewedAt: Timestamp.now(),
+    reviewedByUid: 'verifier-redecision',
+    reviewedByBody: 'authority-redecision',
+    reviewNotes: 'Second decision'
+  }));
+});
+
+test('compliance officer cannot activate unverified or platform-deactivated professionals', async () => {
+  await seed(async db => {
+    await setDoc(doc(db, 'professionalAuthorities', 'authority-compliance-guard'), {
+      id: 'authority-compliance-guard',
+      governedCadres: ['pharmacist'],
+      isActive: true
+    });
+    await setDoc(doc(db, 'professionalAuthorityAdmins', 'compliance-guard'), {
+      uid: 'compliance-guard',
+      authorityId: 'authority-compliance-guard',
+      scopedCadres: ['pharmacist'],
+      role: 'compliance_officer',
+      isActive: true
+    });
+
+    await setDoc(doc(db, 'users', 'unverified-compliance-target'), {
+      id: 'unverified-compliance-target',
+      accountType: 'individual',
+      accountClass: 'professional',
+      accountStatus: 'PENDING_AUTHORITY_VERIFICATION',
+      isActive: false,
+      isVerified: false
+    });
+    await setDoc(doc(db, 'individualProfiles', 'unverified-compliance-target'), {
+      fullName: 'Unverified Target',
+      primaryCadre: 'pharmacist',
+      registrationNumber: 'REG-U',
+      credentialVerificationStatus: 'unverified',
+      practisingLicenceStatus: 'not_renewed',
+      profileCompleteness: 90,
+      isDirectoryVisible: false
+    });
+
+    await setDoc(doc(db, 'users', 'platform-deactivated-target'), {
+      id: 'platform-deactivated-target',
+      accountType: 'individual',
+      accountClass: 'professional',
+      accountStatus: 'DEACTIVATED_BY_PLATFORM',
+      isActive: false,
+      isVerified: true
+    });
+    await setDoc(doc(db, 'individualProfiles', 'platform-deactivated-target'), {
+      fullName: 'Platform Deactivated Target',
+      primaryCadre: 'pharmacist',
+      registrationNumber: 'REG-D',
+      credentialVerificationStatus: 'verified',
+      practisingLicenceStatus: 'renewed_current',
+      profileCompleteness: 90,
+      isDirectoryVisible: false
+    });
+  });
+
+  const db = testEnv.authenticatedContext('compliance-guard', { authority_admin: true }).firestore();
+
+  for (const uid of ['unverified-compliance-target', 'platform-deactivated-target']) {
+    await assertFails(runTransaction(db, async transaction => {
+      transaction.update(doc(db, 'users', uid), {
+        accountStatus: 'ACTIVE',
+        isActive: true,
+        isVerified: true
+      });
+      transaction.update(doc(db, 'individualProfiles', uid), {
+        practisingLicenceStatus: 'renewed_current',
+        isDirectoryVisible: true
+      });
+    }));
+  }
+});
+
 test('verification officer can update verification fields but not compliance fields', async () => {
   await seed(async db => {
     await setDoc(doc(db, 'professionalAuthorities', 'authority-1'), {
@@ -319,7 +529,7 @@ test('verification officer can update verification fields but not compliance fie
 
   const db = testEnv.authenticatedContext('verifier-1', { authority_admin: true }).firestore();
 
-  await assertSucceeds(updateDoc(doc(db, 'individualProfiles', 'target-professional'), {
+  await assertFails(updateDoc(doc(db, 'individualProfiles', 'target-professional'), {
     credentialVerificationStatus: 'verified',
     isDirectoryVisible: false
   }));
