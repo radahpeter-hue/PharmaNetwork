@@ -330,6 +330,114 @@ test('verification officer can update verification fields but not compliance fie
   }));
 });
 
+test('professional directory visibility cannot be enabled unless accountStatus is ACTIVE', async () => {
+  await seed(async db => {
+    await setDoc(doc(db, 'users', 'drift-professional'), {
+      id: 'drift-professional',
+      accountType: 'individual',
+      accountClass: 'professional',
+      accountStatus: 'SUSPENDED_BY_AUTHORITY',
+      isActive: true,
+      isVerified: true
+    });
+    await setDoc(doc(db, 'individualProfiles', 'drift-professional'), {
+      fullName: 'Drift Professional',
+      primaryCadre: 'pharmacist',
+      registrationNumber: 'REG-DRIFT',
+      credentialVerificationStatus: 'verified',
+      profileCompleteness: 90,
+      isDirectoryVisible: false
+    });
+  });
+
+  const db = testEnv.authenticatedContext('drift-professional').firestore();
+
+  await assertFails(updateDoc(doc(db, 'individualProfiles', 'drift-professional'), {
+    bio: 'Attempting to become visible while suspended',
+    isDirectoryVisible: true
+  }));
+});
+
+test('verification officer cannot make a professional directory-visible during verification', async () => {
+  await seed(async db => {
+    await setDoc(doc(db, 'professionalAuthorities', 'authority-verification'), {
+      id: 'authority-verification',
+      governedCadres: ['pharmacist'],
+      isActive: true
+    });
+    await setDoc(doc(db, 'professionalAuthorityAdmins', 'verification-user'), {
+      uid: 'verification-user',
+      authorityId: 'authority-verification',
+      scopedCadres: ['pharmacist'],
+      role: 'verification_officer',
+      isActive: true
+    });
+    await setDoc(doc(db, 'individualProfiles', 'verification-target'), {
+      fullName: 'Verification Target',
+      primaryCadre: 'pharmacist',
+      registrationNumber: 'REG-VIS',
+      credentialVerificationStatus: 'unverified',
+      profileCompleteness: 90,
+      isDirectoryVisible: false
+    });
+  });
+
+  const db = testEnv.authenticatedContext('verification-user', { authority_admin: true }).firestore();
+
+  await assertFails(updateDoc(doc(db, 'individualProfiles', 'verification-target'), {
+    credentialVerificationStatus: 'verified',
+    isDirectoryVisible: true
+  }));
+});
+
+test('compliance activation can atomically activate account and directory visibility', async () => {
+  await seed(async db => {
+    await setDoc(doc(db, 'professionalAuthorities', 'authority-compliance'), {
+      id: 'authority-compliance',
+      governedCadres: ['pharmacist'],
+      isActive: true
+    });
+    await setDoc(doc(db, 'professionalAuthorityAdmins', 'compliance-user'), {
+      uid: 'compliance-user',
+      authorityId: 'authority-compliance',
+      scopedCadres: ['pharmacist'],
+      role: 'compliance_officer',
+      isActive: true
+    });
+    await setDoc(doc(db, 'users', 'compliance-target'), {
+      id: 'compliance-target',
+      accountType: 'individual',
+      accountClass: 'professional',
+      accountStatus: 'INACTIVE_ANNUAL_COMPLIANCE',
+      isActive: false,
+      isVerified: true
+    });
+    await setDoc(doc(db, 'individualProfiles', 'compliance-target'), {
+      fullName: 'Compliance Target',
+      primaryCadre: 'pharmacist',
+      registrationNumber: 'REG-COMP',
+      credentialVerificationStatus: 'verified',
+      practisingLicenceStatus: 'not_renewed',
+      profileCompleteness: 90,
+      isDirectoryVisible: false
+    });
+  });
+
+  const db = testEnv.authenticatedContext('compliance-user', { authority_admin: true }).firestore();
+
+  await assertSucceeds(runTransaction(db, async transaction => {
+    transaction.update(doc(db, 'users', 'compliance-target'), {
+      accountStatus: 'ACTIVE',
+      isActive: true,
+      isVerified: true
+    });
+    transaction.update(doc(db, 'individualProfiles', 'compliance-target'), {
+      practisingLicenceStatus: 'renewed_current',
+      isDirectoryVisible: true
+    });
+  }));
+});
+
 test('compliance officer can update compliance fields but not verification fields', async () => {
   await seed(async db => {
     await setDoc(doc(db, 'professionalAuthorities', 'authority-1'), {
