@@ -161,6 +161,81 @@ test('active member can read CV only for a visible professional profile', async 
   await assertFails(getBytes(ref(readerStorage, 'cvFiles/hidden-owner/cv.pdf')));
 });
 
+test('status-drift member cannot read another professional CV from Storage', async () => {
+  await seedFirestore(async db => {
+    await setDoc(doc(db, 'users', 'drift-reader'), {
+      id: 'drift-reader',
+      accountType: 'individual',
+      accountClass: 'professional',
+      accountStatus: 'SUSPENDED_BY_AUTHORITY',
+      isActive: true,
+      isVerified: true
+    });
+    await setDoc(doc(db, 'users', 'storage-visible-owner'), {
+      id: 'storage-visible-owner',
+      accountType: 'individual',
+      accountClass: 'professional',
+      accountStatus: 'ACTIVE',
+      isActive: true,
+      isVerified: true
+    });
+    await setDoc(doc(db, 'individualProfiles', 'storage-visible-owner'), {
+      fullName: 'Visible Storage Owner',
+      primaryCadre: 'pharmacist',
+      profileCompleteness: 90,
+      isDirectoryVisible: true
+    });
+  });
+
+  const ownerStorage = testEnv.authenticatedContext('storage-visible-owner').storage();
+  await assertSucceeds(uploadBytes(
+    ref(ownerStorage, 'cvFiles/storage-visible-owner/cv.pdf'),
+    new Uint8Array([1, 2, 3]),
+    { contentType: 'application/pdf' }
+  ));
+
+  const driftStorage = testEnv.authenticatedContext('drift-reader').storage();
+  await assertFails(getBytes(ref(driftStorage, 'cvFiles/storage-visible-owner/cv.pdf')));
+});
+
+test('inactive authority staff cannot read verification evidence from Storage', async () => {
+  await seedFirestore(async db => {
+    await setDoc(doc(db, 'professionalAuthorities', 'inactive-storage-authority'), {
+      id: 'inactive-storage-authority',
+      governedCadres: ['pharmacist'],
+      isActive: false
+    });
+    await setDoc(doc(db, 'professionalAuthorityAdmins', 'inactive-storage-verifier'), {
+      uid: 'inactive-storage-verifier',
+      authorityId: 'inactive-storage-authority',
+      scopedCadres: ['pharmacist'],
+      role: 'verification_officer',
+      isActive: true
+    });
+    await setDoc(doc(db, 'individualProfiles', 'storage-evidence-owner'), {
+      fullName: 'Evidence Owner',
+      primaryCadre: 'pharmacist',
+      profileCompleteness: 80,
+      isDirectoryVisible: false
+    });
+  });
+
+  const ownerStorage = testEnv.authenticatedContext('storage-evidence-owner').storage();
+  const path = 'verificationDocs/storage-evidence-owner/registration_certificate';
+  await assertSucceeds(uploadBytes(
+    ref(ownerStorage, path),
+    new Uint8Array([1, 2, 3]),
+    { contentType: 'application/pdf' }
+  ));
+
+  const authorityStorage = testEnv.authenticatedContext(
+    'inactive-storage-verifier',
+    { authority_admin: true }
+  ).storage();
+
+  await assertFails(getBytes(ref(authorityStorage, path)));
+});
+
 test('scoped authority admin can read verification evidence only for governed cadre', async () => {
   await seedFirestore(async db => {
     await setDoc(doc(db, 'professionalAuthorities', 'authority-1'), {
