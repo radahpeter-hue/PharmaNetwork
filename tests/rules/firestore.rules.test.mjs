@@ -452,6 +452,14 @@ test('compliance officer can update compliance fields but not verification field
       role: 'compliance_officer',
       isActive: true
     });
+    await setDoc(doc(db, 'users', 'target-professional'), {
+      id: 'target-professional',
+      accountType: 'individual',
+      accountClass: 'professional',
+      accountStatus: 'INACTIVE_ANNUAL_COMPLIANCE',
+      isActive: false,
+      isVerified: true
+    });
     await setDoc(doc(db, 'individualProfiles', 'target-professional'), {
       fullName: 'Target Professional',
       primaryCadre: 'pharmacist',
