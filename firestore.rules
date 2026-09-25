@@ -848,6 +848,14 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // Privilege audit records are created only by trusted Admin SDK tooling.
+    // Platform admins may inspect them, but no client (including an admin UI)
+    // may create, alter or delete the audit trail.
+    match /privilegeAuditLogs/{logId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
     match /{document=**} {
       allow read, write: if false;
     }
