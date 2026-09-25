@@ -77,10 +77,12 @@ service cloud.firestore {
           'credentialRejectionReason',
           'isDirectoryVisible',
           'updatedAt'
-        ]);
+        ])
+        && request.resource.data.isDirectoryVisible == false;
     }
 
-    function isAuthorityComplianceProfileUpdate(cadre) {
+    function isAuthorityComplianceProfileUpdate(userId, cadre) {
+      let accountAfter = getAfter(/databases/$(database)/documents/users/$(userId)).data;
       return authorityAdminHasCadre(cadre)
         && authorityRoleIsOneOf(['authority_super_admin', 'compliance_officer'])
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
@@ -91,7 +93,13 @@ service cloud.firestore {
           'licenceSuspensionReason',
           'isDirectoryVisible',
           'updatedAt'
-        ]);
+        ])
+        && request.resource.data.isDirectoryVisible
+          == (
+            accountAfter.isActive == true
+            && accountAfter.accountStatus == 'ACTIVE'
+            && request.resource.data.profileCompleteness >= 60
+          );
     }
 
     function isAuthorityVerificationAccountUpdate(userId) {
@@ -468,12 +476,13 @@ service cloud.firestore {
           && request.resource.data.isDirectoryVisible
             == (
               get(/databases/$(database)/documents/users/$(userId)).data.isActive == true
+              && get(/databases/$(database)/documents/users/$(userId)).data.accountStatus == 'ACTIVE'
               && request.resource.data.profileCompleteness >= 60
             )
         )
         || isAdmin()
         || isAuthorityVerificationProfileUpdate(resource.data.primaryCadre)
-        || isAuthorityComplianceProfileUpdate(resource.data.primaryCadre)
+        || isAuthorityComplianceProfileUpdate(userId, resource.data.primaryCadre)
       );
       allow delete: if isAdmin();
     }
